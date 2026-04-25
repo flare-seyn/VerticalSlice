@@ -12,7 +12,7 @@ const world = {
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
   const code = e.code;
-  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD"].includes(code)) {
+  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR"].includes(code)) {
     e.preventDefault();
   }
   keys.add(code);
@@ -84,7 +84,25 @@ function resetPlayer(message = 'You reset to start.') {
   setStatus(message);
 }
 
+function resetEnemy() {
+  enemy.x = 575;
+  enemy.y = 400;
+  enemy.vx = 0;
+  enemy.state = 'patrol';
+  enemy.direction = 1;
+}
+
+function resetLevel(message = 'Level reset. Reach the exit and avoid the enemy.') {
+  resetEnemy();
+  resetPlayer(message);
+}
+
 function updatePlayer(dt) {
+  if (keys.has('KeyR')) {
+    resetLevel();
+    return;
+  }
+
   if (!player.alive || player.won) return;
 
   const left = keys.has('ArrowLeft') || keys.has('KeyA');
@@ -154,7 +172,7 @@ function updatePlayer(dt) {
   // exit win condition
   if (overlap(player, exitDoor)) {
     player.won = true;
-    setStatus('Success! You reached the exit.');
+    setStatus('Success! You reached the exit. Press R to play again.');
   }
 }
 
