@@ -34,7 +34,7 @@ const keysHeld = new Set();
 const keysPressed = new Set();
 window.addEventListener('keydown', (e) => {
   const code = e.code;
-  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE"].includes(code)) {
+  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE", "ShiftLeft", "ShiftRight"].includes(code)) {
     e.preventDefault();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
@@ -54,6 +54,11 @@ const player = {
   onGround: false,
   won: false,
   facing: 1,
+  dashCharge: 1,
+  dashCooldown: 0,
+  dashTimer: 0,
+  coyoteTimer: 0,
+  jumpBufferTimer: 0,
 };
 
 const levels = [
@@ -67,7 +72,16 @@ const levels = [
       { x: 760, y: 380, w: 120, h: 20 },
       { x: 900, y: 320, w: 60, h: 20 },
     ],
-    spikes: [{ x: 250, y: 500, w: 65, h: 40 }],
+    spikes: [{ x: 258, y: 500, w: 40, h: 40 }],
+    movingPlatforms: [
+      { x: 470, y: 420, w: 90, h: 16, axis: 'x', origin: 470, range: 70, speed: 1.2, phase: 0.2 },
+    ],
+    bouncePads: [{ x: 860, y: 302, w: 38, h: 18, force: 900 }],
+    crumblePlatforms: [],
+    relics: [
+      { x: 355, y: 470, w: 14, h: 14, collected: false },
+      { x: 780, y: 350, w: 14, h: 14, collected: false },
+    ],
     lever: { x: 185, y: 460, w: 18, h: 40, pulled: false, promptRange: 80 },
     gate: { x: 915, y: 265, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
     enemy: {
@@ -75,11 +89,11 @@ const levels = [
       y: 400,
       w: 34,
       h: 34,
-      speed: 95,
+      speed: 72,
       patrolMinX: 555,
       patrolMaxX: 690,
-      detectionRange: 210,
-      resetRange: 290,
+      detectionRange: 130,
+      resetRange: 210,
     },
   },
   {
@@ -95,6 +109,18 @@ const levels = [
     spikes: [
       { x: 232, y: 500, w: 30, h: 40 },
       { x: 635, y: 500, w: 30, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 510, y: 360, w: 86, h: 16, axis: 'x', origin: 510, range: 90, speed: 1.6, phase: 0.6 },
+    ],
+    bouncePads: [{ x: 715, y: 442, w: 38, h: 18, force: 980 }],
+    crumblePlatforms: [
+      { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 505, y: 386, w: 14, h: 14, collected: false },
+      { x: 736, y: 432, w: 14, h: 14, collected: false },
+      { x: 838, y: 472, w: 14, h: 14, collected: false },
     ],
     lever: { x: 340, y: 410, w: 18, h: 40, pulled: false, promptRange: 66 },
     gate: { x: 900, y: 445, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
@@ -163,6 +189,13 @@ function loadLevel(index, message) {
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
   if (level.lever) level.lever.pulled = false;
+  if (level.relics) level.relics.forEach((r) => { r.collected = false; });
+  if (level.crumblePlatforms) {
+    level.crumblePlatforms.forEach((p) => {
+      p.state = 'solid';
+      p.timer = 0;
+    });
+  }
   resetEnemy();
   resetPlayer(level.start, message || `${level.name}. Reach the gate.`);
 }
@@ -171,12 +204,71 @@ function restartLevel(message = 'Level reset.') {
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
   if (level.lever) level.lever.pulled = false;
+  if (level.relics) level.relics.forEach((r) => { r.collected = false; });
+  if (level.crumblePlatforms) {
+    level.crumblePlatforms.forEach((p) => {
+      p.state = 'solid';
+      p.timer = 0;
+    });
+  }
   resetEnemy();
   resetPlayer(level.start, `${message} ${level.name}`);
 }
 
 function isPressed(code) {
   return keysPressed.has(code);
+}
+
+function updateDynamicFeatures(level, dt, nowMs) {
+  if (level.movingPlatforms) {
+    for (const mp of level.movingPlatforms) {
+      const offset = Math.sin(nowMs / 1000 * mp.speed + mp.phase) * mp.range;
+      if (mp.axis === 'x') mp.x = mp.origin + offset;
+    }
+  }
+
+  if (level.crumblePlatforms) {
+    for (const cp of level.crumblePlatforms) {
+      if (cp.state === 'breaking') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'gone';
+          cp.timer = 2.2;
+        }
+      } else if (cp.state === 'gone') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'solid';
+          cp.timer = 0;
+        }
+      }
+    }
+  }
+}
+
+function updatePlayerAdvancedMovement(dt) {
+  if (player.dashCooldown > 0) player.dashCooldown -= dt;
+  if (player.dashTimer > 0) player.dashTimer -= dt;
+
+  if (player.onGround) {
+    player.coyoteTimer = 0.1;
+    player.dashCharge = 1;
+  } else {
+    player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
+  }
+
+  if (isPressed('Space')) {
+    player.jumpBufferTimer = 0.12;
+  } else {
+    player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
+  }
+}
+
+function getSolidPlatforms(level) {
+  const staticPlatforms = level.platforms || [];
+  const movingPlatforms = level.movingPlatforms || [];
+  const crumblePlatforms = (level.crumblePlatforms || []).filter((p) => p.state !== 'gone');
+  return [...staticPlatforms, ...movingPlatforms, ...crumblePlatforms];
 }
 
 function updatePlayer(dt) {
@@ -190,6 +282,7 @@ function updatePlayer(dt) {
   const level = currentLevel();
   const left = keysHeld.has('ArrowLeft') || keysHeld.has('KeyA');
   const right = keysHeld.has('ArrowRight') || keysHeld.has('KeyD');
+  const dash = isPressed('ShiftLeft') || isPressed('ShiftRight');
 
   if (left === right) {
     player.vx = 0;
@@ -198,12 +291,27 @@ function updatePlayer(dt) {
     player.facing = left ? -1 : 1;
   }
 
-  if (keysHeld.has('Space') && player.onGround) {
+  updatePlayerAdvancedMovement(dt);
+
+  if (player.jumpBufferTimer > 0 && (player.onGround || player.coyoteTimer > 0)) {
     player.vy = -player.jumpForce;
     player.onGround = false;
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
   }
 
-  player.vy += world.gravity * dt;
+  if (dash && player.dashCharge > 0 && player.dashCooldown <= 0) {
+    const dashDir = left ? -1 : (right ? 1 : player.facing);
+    player.vx = dashDir * 520;
+    player.vy *= 0.25;
+    player.dashTimer = 0.14;
+    player.dashCooldown = 0.4;
+    player.dashCharge -= 1;
+    setStatus('Dash!');
+  }
+
+  const gravityScale = player.dashTimer > 0 ? 0.2 : 1;
+  player.vy += world.gravity * gravityScale * dt;
 
   const prevX = player.x;
   const prevY = player.y;
@@ -214,7 +322,7 @@ function updatePlayer(dt) {
   player.x = Math.max(0, Math.min(world.width - player.w, player.x));
   player.onGround = false;
 
-  for (const p of level.platforms) {
+  for (const p of getSolidPlatforms(level)) {
     if (!overlap(player, p)) continue;
 
     const cameFromAbove = prevY + player.h <= p.y;
@@ -224,6 +332,10 @@ function updatePlayer(dt) {
       player.y = p.y - player.h;
       player.vy = 0;
       player.onGround = true;
+      if (level.crumblePlatforms && level.crumblePlatforms.includes(p) && p.state === 'solid') {
+        p.state = 'breaking';
+        p.timer = 0.45;
+      }
     } else if (cameFromBelow) {
       player.y = p.y + p.h;
       player.vy = Math.max(0, player.vy);
@@ -244,6 +356,15 @@ function updatePlayer(dt) {
     return;
   }
 
+  if (level.bouncePads) {
+    for (const pad of level.bouncePads) {
+      if (overlap(player, pad) && player.vy >= -120) {
+        player.vy = -pad.force;
+        player.onGround = false;
+      }
+    }
+  }
+
   if (player.y > world.height + 80) {
     restartLevel('You fell!');
     return;
@@ -258,9 +379,26 @@ function updatePlayer(dt) {
     };
 
     if (overlap(player, leverZone) && !level.lever.pulled && isPressed('KeyE')) {
-      level.lever.pulled = true;
-      level.gate.locked = false;
-      setStatus('Joystick pulled! Gate unlocked.');
+      const totalRelics = level.relics ? level.relics.length : 0;
+      const collectedRelics = level.relics ? level.relics.filter((r) => r.collected).length : 0;
+      if (collectedRelics < totalRelics) {
+        setStatus(`Need more relics (${collectedRelics}/${totalRelics}) before pulling joystick.`);
+      } else {
+        level.lever.pulled = true;
+        level.gate.locked = false;
+        setStatus('Joystick pulled! Gate unlocked.');
+      }
+    }
+  }
+
+  if (level.relics) {
+    for (const relic of level.relics) {
+      if (!relic.collected && overlap(player, relic)) {
+        relic.collected = true;
+        const total = level.relics.length;
+        const got = level.relics.filter((r) => r.collected).length;
+        setStatus(`Relic collected (${got}/${total}).`);
+      }
     }
   }
 
@@ -347,6 +485,32 @@ function drawSpikes(spikes) {
   }
 }
 
+function drawBouncePads(bouncePads) {
+  for (const pad of bouncePads || []) {
+    const grad = ctx.createLinearGradient(pad.x, pad.y, pad.x, pad.y + pad.h);
+    grad.addColorStop(0, '#9cff93');
+    grad.addColorStop(1, '#2fba67');
+    ctx.fillStyle = grad;
+    ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+    ctx.fillStyle = '#173d2a';
+    ctx.fillRect(pad.x + 3, pad.y + 3, pad.w - 6, 4);
+  }
+}
+
+function drawRelics(relics) {
+  for (const relic of relics || []) {
+    if (relic.collected) continue;
+    const pulse = 1 + Math.sin(performance.now() / 140) * 0.08;
+    const size = relic.w * pulse;
+    const ox = relic.x + relic.w / 2 - size / 2;
+    const oy = relic.y + relic.h / 2 - size / 2;
+    ctx.fillStyle = '#ffd66b';
+    ctx.fillRect(ox, oy, size, size);
+    ctx.fillStyle = '#fff3c8';
+    ctx.fillRect(ox + 3, oy + 3, size - 6, size - 6);
+  }
+}
+
 function drawGate(gate) {
   const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
   gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
@@ -407,6 +571,16 @@ function drawPlayer() {
   // scarf accent
   ctx.fillStyle = '#ff8a5b';
   ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
+  // legs animation
+  const walk = Math.sin(performance.now() / 70) * 3 * (Math.abs(player.vx) > 10 ? 1 : 0.2);
+  ctx.fillStyle = '#1e5f85';
+  ctx.fillRect(px + 5, py + player.h - 8 + walk * 0.2, 6, 8);
+  ctx.fillRect(px + player.w - 11, py + player.h - 8 - walk * 0.2, 6, 8);
+  // dash trail
+  if (player.dashTimer > 0) {
+    ctx.fillStyle = 'rgba(130, 245, 255, 0.4)';
+    ctx.fillRect(px - player.facing * 10, py + 8, player.w, player.h - 8);
+  }
   // outline
   ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
@@ -446,6 +620,12 @@ function drawEnemy() {
   ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
   ctx.fill();
 
+  // mouth animation by state
+  const mouthWidth = enemy.state === 'alert' ? 14 : 9;
+  const mouthY = enemy.y + enemy.h - 10 + Math.sin(performance.now() / 220) * 1.2;
+  ctx.fillStyle = '#2d1b1b';
+  ctx.fillRect(enemy.x + enemy.w / 2 - mouthWidth / 2, mouthY, mouthWidth, 3);
+
   // alert spikes
   if (enemy.state === 'alert') {
     ctx.fillStyle = '#ffd2d2';
@@ -459,13 +639,17 @@ function drawUI(level) {
   ctx.font = '16px sans-serif';
   ctx.fillText(level.name, 16, 24);
   ctx.fillText(`Enemy state: ${enemy.state.toUpperCase()}`, 16, 46);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump, E interact, R reset', 16, 68);
+  const totalRelics = (level.relics || []).length;
+  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+  ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
+  ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
+  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift dash, E interact, R reset', 16, 112);
 
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
     if (nearLever) {
       ctx.fillStyle = '#ffe790';
-      ctx.fillText('Press E to pull joystick', level.lever.x - 38, level.lever.y - 10);
+      ctx.fillText('Press E to pull joystick (all relics required)', level.lever.x - 84, level.lever.y - 10);
     }
   }
 }
@@ -481,8 +665,10 @@ function draw() {
     ctx.fillRect(i * 90, 0, 45, canvas.height);
   }
 
-  drawPlatforms(level.platforms);
+  drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
+  drawBouncePads(level.bouncePads);
+  drawRelics(level.relics);
   drawLever(level.lever);
   drawGate(level.gate);
   drawEnemy();
@@ -495,6 +681,7 @@ function loop(now) {
   const dt = Math.min((now - lastTime) / 1000, 1 / 30);
   lastTime = now;
 
+  updateDynamicFeatures(currentLevel(), dt, now);
   updatePlayer(dt);
   updateEnemy(dt);
   draw();
