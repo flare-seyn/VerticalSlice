@@ -1,6 +1,5 @@
 # GDIM33 Vertical Slice
 
-
 ## Milestone 1 Devlog
 
 ### Prompt 1: Pick 1 Visual Scripting Graph and explain how it works
