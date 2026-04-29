@@ -1,43 +1,5 @@
 # GDIM33 Vertical Slice
 
-## Milestone 1 Playable Build
-This repository now includes a playable Milestone 1 web prototype with the required core scope:
-- Player can move left/right and jump.
-- Test levels have platforming obstacles (gaps + spikes).
-- Player can reach a first gate, then complete a second level.
-- Enemy uses a behavior state machine with **Patrol → Alert → Reset**.
-- Includes interactive **joystick/lever pulls** to unlock progression gates.
-- Player and enemy use more polished, distinct visual materials/styles.
-- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, and collectible relic objectives.
-- Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
-
-## Run Locally
-Because this is plain HTML/CSS/JS, you can run it with a static server:
-
-```bash
-python3 -m http.server 8000
-```
-
-Then open: `http://localhost:8000`
-
-## Controls
-- `A` / `D` or `Left` / `Right Arrow`: Move
-- `Space`: Jump
-- `E`: Interact (pull lever/joystick)
-- `R`: Reset/restart current level
-
-Goal: collect relics in each stage, then pull that stage’s joystick to unlock its gate and progress.
-
-## State Machine (MS1)
-Enemy behavior uses three states:
-- **Patrol**: enemy moves back and forth in a fixed zone.
-- **Alert**: enemy speeds up and chases player direction when player is close.
-- **Reset**: enemy returns to patrol origin when player leaves range.
-
-Transitions:
-- Patrol → Alert: player enters detection range.
-- Alert → Reset: player leaves reset range.
-- Reset → Patrol: enemy reaches patrol start area.
 
 ## Milestone 1 Devlog
 
