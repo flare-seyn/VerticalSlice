@@ -10,6 +10,8 @@ const world = {
 
 const material = {
   platformPattern: null,
+  wallPattern: null,
+  trimPattern: null,
 };
 
 function buildMaterials() {
@@ -28,6 +30,107 @@ function buildMaterials() {
   tctx.lineTo(24, 12);
   tctx.stroke();
   material.platformPattern = ctx.createPattern(tile, 'repeat');
+
+  const wall = document.createElement('canvas');
+  wall.width = 32;
+  wall.height = 32;
+  const wctx = wall.getContext('2d');
+  wctx.fillStyle = '#182033';
+  wctx.fillRect(0, 0, wall.width, wall.height);
+  wctx.fillStyle = '#202a44';
+  wctx.fillRect(1, 1, 30, 30);
+  wctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+  wctx.strokeRect(6, 6, 20, 20);
+  material.wallPattern = ctx.createPattern(wall, 'repeat');
+
+  const trim = document.createElement('canvas');
+  trim.width = 16;
+  trim.height = 16;
+  const rctx = trim.getContext('2d');
+  rctx.fillStyle = '#293554';
+  rctx.fillRect(0, 0, trim.width, trim.height);
+  rctx.fillStyle = '#8ff7ff';
+  rctx.globalAlpha = 0.22;
+  rctx.fillRect(0, 0, 16, 3);
+  rctx.fillRect(0, 13, 16, 3);
+  material.trimPattern = ctx.createPattern(trim, 'repeat');
+}
+
+
+let audioContext = null;
+const particles = [];
+
+function initAudio() {
+  if (audioContext) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  audioContext = new AudioCtor();
+  if (audioContext.state === 'suspended') audioContext.resume();
+}
+
+function playSound(type) {
+  if (!audioContext) return;
+  const soundMap = {
+    jump: { frequency: 420, end: 660, duration: 0.09, gain: 0.035, wave: 'triangle' },
+    dash: { frequency: 180, end: 80, duration: 0.12, gain: 0.045, wave: 'sawtooth' },
+    collect: { frequency: 640, end: 980, duration: 0.16, gain: 0.035, wave: 'sine' },
+    unlock: { frequency: 360, end: 760, duration: 0.22, gain: 0.05, wave: 'triangle' },
+    bounce: { frequency: 260, end: 520, duration: 0.13, gain: 0.04, wave: 'square' },
+    hazard: { frequency: 170, end: 70, duration: 0.18, gain: 0.05, wave: 'sawtooth' },
+    alert: { frequency: 520, end: 300, duration: 0.11, gain: 0.025, wave: 'square' },
+  };
+  const config = soundMap[type];
+  if (!config) return;
+  const now = audioContext.currentTime;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = config.wave;
+  osc.frequency.setValueAtTime(config.frequency, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, config.end), now + config.duration);
+  gain.gain.setValueAtTime(config.gain, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + config.duration);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start(now);
+  osc.stop(now + config.duration);
+}
+
+function spawnParticles(x, y, count, color, options = {}) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.7;
+    const speed = (options.speed || 80) * (0.45 + Math.random());
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed + (options.vx || 0),
+      vy: Math.sin(angle) * speed + (options.vy || 0),
+      life: options.life || 0.45,
+      maxLife: options.life || 0.45,
+      size: options.size || 4,
+      color,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const particle = particles[i];
+    particle.life -= dt;
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += 220 * dt;
+    if (particle.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const particle of particles) {
+    const alpha = Math.max(0, particle.life / particle.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(particle.x, particle.y, particle.size * alpha, particle.size * alpha);
+  }
+  ctx.globalAlpha = 1;
 }
 
 const keysHeld = new Set();
@@ -36,6 +139,7 @@ window.addEventListener('keydown', (e) => {
   const code = e.code;
   if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE", "ShiftLeft", "ShiftRight"].includes(code)) {
     e.preventDefault();
+    initAudio();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
   keysHeld.add(code);
@@ -61,13 +165,20 @@ const player = {
   jumpBufferTimer: 0,
   animTime: 0,
   animationState: 'idle',
-  graphPulseTimer: 0,
 };
 
 const levels = [
   {
     name: 'Level 1: Entry Hall',
     start: { x: 40, y: 420 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 96, type: 'wall' },
+      { x: 64, y: 132, w: 160, h: 32, type: 'trim' },
+      { x: 382, y: 108, w: 128, h: 32, type: 'trim' },
+      { x: 668, y: 130, w: 192, h: 32, type: 'wall' },
+      { x: 120, y: 448, w: 64, h: 32, type: 'crystal' },
+      { x: 590, y: 392, w: 64, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 240, h: 40 },
       { x: 320, y: 500, w: 180, h: 40 },
@@ -104,6 +215,14 @@ const levels = [
   {
     name: 'Level 2: Lever Chamber',
     start: { x: 30, y: 300 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
+      { x: 32, y: 146, w: 128, h: 32, type: 'trim' },
+      { x: 332, y: 118, w: 224, h: 32, type: 'wall' },
+      { x: 690, y: 140, w: 192, h: 32, type: 'trim' },
+      { x: 292, y: 402, w: 96, h: 32, type: 'crystal' },
+      { x: 742, y: 412, w: 80, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 230, h: 40 },
       { x: 265, y: 450, w: 180, h: 20 },
@@ -207,12 +326,12 @@ function resetPlayer(position, message) {
   player.dashCharge = 1;
   player.animTime = 0;
   player.animationState = 'idle';
-  player.graphPulseTimer = 0;
   setStatus(message);
 }
 
 function loadLevel(index, message) {
   currentLevelIndex = index;
+  particles.length = 0;
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
   if (level.lever) level.lever.pulled = false;
@@ -275,7 +394,6 @@ function updateDynamicFeatures(level, dt, nowMs) {
 
 function updatePlayerAdvancedMovement(dt) {
   player.animTime += dt;
-  if (player.graphPulseTimer > 0) player.graphPulseTimer -= dt;
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
@@ -327,6 +445,8 @@ function updatePlayer(dt) {
     player.onGround = false;
     player.coyoteTimer = 0;
     player.jumpBufferTimer = 0;
+    playSound('jump');
+    spawnParticles(player.x + player.w / 2, player.y + player.h, 8, '#8ff7ff', { speed: 55, life: 0.28, size: 3 });
   }
 
   player.animationState = player.onGround
@@ -341,7 +461,8 @@ function updatePlayer(dt) {
     player.dashCooldown = 0.65;
     player.dashCharge -= 1;
     player.animationState = 'dash';
-    player.graphPulseTimer = 0.35;
+    playSound('dash');
+    spawnParticles(player.x + player.w / 2 - player.facing * 16, player.y + player.h / 2, 18, '#8ff7ff', { speed: 120, vx: -player.facing * 80, life: 0.34, size: 5 });
     setStatus('Dash!');
   }
 
@@ -381,6 +502,8 @@ function updatePlayer(dt) {
 
   for (const s of level.spikes) {
     if (overlap(player, s)) {
+      playSound('hazard');
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
       restartLevel('Hit spikes!');
       return;
     }
@@ -393,9 +516,13 @@ function updatePlayer(dt) {
     if (stomped) {
       enemy.defeated = true;
       player.vy = -380;
+      playSound('bounce');
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 18, '#ffd66b', { speed: 110, life: 0.45, size: 4 });
       setStatus('Enemy incapacitated!');
       continue;
     }
+    playSound('hazard');
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
     restartLevel('Enemy got you!');
     return;
   }
@@ -405,6 +532,8 @@ function updatePlayer(dt) {
       if (overlap(player, pad) && player.vy >= -120) {
         player.vy = -pad.force;
         player.onGround = false;
+        playSound('bounce');
+        spawnParticles(pad.x + pad.w / 2, pad.y, 16, '#9cff93', { speed: 95, vy: -60, life: 0.36, size: 4 });
       }
     }
   }
@@ -430,8 +559,9 @@ function updatePlayer(dt) {
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
-        player.graphPulseTimer = 0.7;
-        setStatus('Joystick pulled! Gate unlocked. Visual graph fired GateUnlock.');
+        playSound('unlock');
+        spawnParticles(level.gate.x + level.gate.w / 2, level.gate.y + level.gate.h / 2, 30, '#65df95', { speed: 135, life: 0.7, size: 5 });
+        setStatus('Joystick pulled! Gate unlocked.');
       }
     }
   }
@@ -440,7 +570,8 @@ function updatePlayer(dt) {
     for (const relic of level.relics) {
       if (!relic.collected && overlap(player, relic)) {
         relic.collected = true;
-        player.graphPulseTimer = 0.25;
+        playSound('collect');
+        spawnParticles(relic.x + relic.w / 2, relic.y + relic.h / 2, 14, '#ffd66b', { speed: 90, life: 0.42, size: 4 });
         const total = level.relics.length;
         const got = level.relics.filter((r) => r.collected).length;
         setStatus(`Relic collected (${got}/${total}).`);
@@ -480,6 +611,8 @@ function updateEnemy(dt) {
     if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
       enemy.state = 'alert';
       enemy.lastState = 'patrol';
+      playSound('alert');
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + 2, 8, '#ff6b6b', { speed: 70, life: 0.3, size: 3 });
     } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
       enemy.state = 'reset';
       enemy.lastState = 'alert';
@@ -510,6 +643,51 @@ function updateEnemy(dt) {
       if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
     }
   }
+}
+
+
+function drawDecorTilemap(level) {
+  for (const tile of level.decorTiles || []) {
+    if (tile.type === 'wall') {
+      ctx.fillStyle = material.wallPattern || '#202a44';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      ctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+      ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'trim') {
+      ctx.fillStyle = material.trimPattern || '#293554';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'crystal') {
+      const crystalCount = Math.max(3, Math.floor(tile.w / 20));
+      for (let i = 0; i < crystalCount; i++) {
+        const x = tile.x + i * 18 + 4;
+        const h = 12 + (i % 3) * 7;
+        const y = tile.y + tile.h - h;
+        const grad = ctx.createLinearGradient(x, y, x, y + h);
+        grad.addColorStop(0, '#c6fbff');
+        grad.addColorStop(1, '#3fa3c6');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x + 6, y);
+        ctx.lineTo(x + 12, y + h);
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function drawAmbientVfx(nowMs) {
+  const time = nowMs / 1000;
+  ctx.save();
+  for (let i = 0; i < 28; i++) {
+    const x = (i * 73 + Math.sin(time * 0.6 + i) * 18) % world.width;
+    const y = 70 + ((i * 43 + time * 18) % 360);
+    const alpha = 0.12 + Math.sin(time * 1.7 + i) * 0.05;
+    ctx.fillStyle = `rgba(143, 247, 255, ${alpha})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.restore();
 }
 
 function drawPlatforms(platforms) {
@@ -797,64 +975,22 @@ function drawEnemy() {
   }
 }
 
-function drawVisualGraphStatus() {
-  const x = 710;
-  const y = 18;
-  const pulse = Math.max(0, player.graphPulseTimer);
-  const alpha = 0.72 + Math.min(0.24, pulse * 0.3);
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = 'rgba(12, 17, 29, 0.78)';
-  ctx.fillRect(x, y, 232, 84);
-  ctx.strokeStyle = pulse > 0 ? '#8ff7ff' : '#4e5872';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x, y, 232, 84);
-  ctx.fillStyle = '#d8fbff';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('Visual Graph Bridge', x + 10, y + 18);
-
-  const nodes = [
-    { label: 'Collect', nx: x + 18, ny: y + 42, active: pulse > 0.2 },
-    { label: 'GateUnlock', nx: x + 91, ny: y + 42, active: pulse > 0.45 },
-    { label: 'FX/UI', nx: x + 178, ny: y + 42, active: pulse > 0 },
-  ];
-  ctx.strokeStyle = pulse > 0 ? '#8ff7ff' : '#6d7690';
-  ctx.beginPath();
-  ctx.moveTo(nodes[0].nx + 46, nodes[0].ny + 10);
-  ctx.lineTo(nodes[1].nx - 6, nodes[1].ny + 10);
-  ctx.moveTo(nodes[1].nx + 70, nodes[1].ny + 10);
-  ctx.lineTo(nodes[2].nx - 6, nodes[2].ny + 10);
-  ctx.stroke();
-  for (const node of nodes) {
-    ctx.fillStyle = node.active ? '#173d4f' : '#252d43';
-    ctx.fillRect(node.nx, node.ny, node.label === 'GateUnlock' ? 70 : 50, 22);
-    ctx.strokeStyle = node.active ? '#8ff7ff' : '#58637d';
-    ctx.strokeRect(node.nx, node.ny, node.label === 'GateUnlock' ? 70 : 50, 22);
-    ctx.fillStyle = node.active ? '#ffffff' : '#c4cbda';
-    ctx.fillText(node.label, node.nx + 5, node.ny + 15);
-  }
-  ctx.restore();
-}
-
-function drawUI(level) {
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '16px sans-serif';
-  ctx.fillText(level.name, 16, 24);
-  const activeEnemies = enemies.filter((e) => !e.defeated).length;
-  const firstActive = enemies.find((e) => !e.defeated);
-  const enemyStateText = firstActive ? firstActive.state.toUpperCase() : 'DEFEATED';
-  ctx.fillText(`Enemy state: ${enemyStateText} | Active: ${activeEnemies}`, 16, 46);
-  const totalRelics = (level.relics || []).length;
-  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
-  ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
-  ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift ground dash, E interact, R reset', 16, 112);
-
+function drawTutorialGuides(level) {
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
     if (nearLever) {
+      const totalRelics = (level.relics || []).length;
+      const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+      const prompt = collectedRelics === totalRelics ? 'Press E' : `${collectedRelics}/${totalRelics} relics`;
+      ctx.save();
+      ctx.fillStyle = 'rgba(12, 17, 29, 0.72)';
+      ctx.fillRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
+      ctx.strokeStyle = '#ffe790';
+      ctx.strokeRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
       ctx.fillStyle = '#ffe790';
-      ctx.fillText('Press E to pull joystick (all relics required)', level.lever.x - 84, level.lever.y - 10);
+      ctx.font = '14px sans-serif';
+      ctx.fillText(prompt, level.lever.x - 28, level.lever.y - 17);
+      ctx.restore();
     }
   }
 }
@@ -869,6 +1005,8 @@ function draw() {
   for (let i = 0; i < 12; i++) {
     ctx.fillRect(i * 90, 0, 45, canvas.height);
   }
+  drawDecorTilemap(level);
+  drawAmbientVfx(performance.now());
 
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
@@ -878,8 +1016,8 @@ function draw() {
   drawGate(level.gate);
   drawEnemy();
   drawPlayer();
-  drawUI(level);
-  drawVisualGraphStatus();
+  drawParticles();
+  drawTutorialGuides(level);
 }
 
 let lastTime = performance.now();
@@ -890,6 +1028,7 @@ function loop(now) {
   updateDynamicFeatures(currentLevel(), dt, now);
   updatePlayer(dt);
   updateEnemy(dt);
+  updateParticles(dt);
   draw();
 
   keysPressed.clear();
