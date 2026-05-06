@@ -34,7 +34,7 @@ const keysHeld = new Set();
 const keysPressed = new Set();
 window.addEventListener('keydown', (e) => {
   const code = e.code;
-  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE"].includes(code)) {
+  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE", "ShiftLeft", "ShiftRight"].includes(code)) {
     e.preventDefault();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
@@ -54,6 +54,11 @@ const player = {
   onGround: false,
   won: false,
   facing: 1,
+  dashCharge: 1,
+  dashCooldown: 0,
+  dashTimer: 0,
+  coyoteTimer: 0,
+  jumpBufferTimer: 0,
 };
 
 const levels = [
@@ -79,17 +84,19 @@ const levels = [
     ],
     lever: { x: 185, y: 460, w: 18, h: 40, pulled: false, promptRange: 80 },
     gate: { x: 915, y: 265, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
-    enemy: {
-      spawnX: 575,
-      y: 400,
-      w: 34,
-      h: 34,
-      speed: 72,
-      patrolMinX: 555,
-      patrolMaxX: 690,
-      detectionRange: 130,
-      resetRange: 210,
-    },
+    enemies: [
+      {
+        spawnX: 575,
+        y: 400,
+        w: 34,
+        h: 34,
+        speed: 68,
+        patrolMinX: 555,
+        patrolMaxX: 690,
+        detectionRange: 120,
+        resetRange: 200,
+      },
+    ],
   },
   {
     name: 'Level 2: Lever Chamber',
@@ -119,22 +126,35 @@ const levels = [
     ],
     lever: { x: 340, y: 410, w: 18, h: 40, pulled: false, promptRange: 66 },
     gate: { x: 900, y: 445, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
-    enemy: {
-      spawnX: 690,
-      y: 426,
-      w: 34,
-      h: 34,
-      speed: 105,
-      patrolMinX: 670,
-      patrolMaxX: 840,
-      detectionRange: 240,
-      resetRange: 300,
-    },
+    enemies: [
+      {
+        spawnX: 640,
+        y: 426,
+        w: 34,
+        h: 34,
+        speed: 70,
+        patrolMinX: 610,
+        patrolMaxX: 730,
+        detectionRange: 100,
+        resetRange: 170,
+      },
+      {
+        spawnX: 770,
+        y: 426,
+        w: 34,
+        h: 34,
+        speed: 76,
+        patrolMinX: 730,
+        patrolMaxX: 845,
+        detectionRange: 120,
+        resetRange: 190,
+      },
+    ],
   },
 ];
 
 let currentLevelIndex = 0;
-let enemy = null;
+let enemies = [];
 
 function currentLevel() {
   return levels[currentLevelIndex];
@@ -152,8 +172,8 @@ function overlap(a, b) {
 }
 
 function resetEnemy() {
-  const levelEnemy = currentLevel().enemy;
-  enemy = {
+  const levelEnemies = currentLevel().enemies || [];
+  enemies = levelEnemies.map((levelEnemy) => ({
     x: levelEnemy.spawnX,
     y: levelEnemy.y,
     w: levelEnemy.w,
@@ -166,7 +186,8 @@ function resetEnemy() {
     resetRange: levelEnemy.resetRange,
     state: 'patrol',
     direction: 1,
-  };
+    defeated: false,
+  }));
 }
 
 function resetPlayer(position, message) {
@@ -241,6 +262,24 @@ function updateDynamicFeatures(level, dt, nowMs) {
   }
 }
 
+function updatePlayerAdvancedMovement(dt) {
+  if (player.dashCooldown > 0) player.dashCooldown -= dt;
+  if (player.dashTimer > 0) player.dashTimer -= dt;
+
+  if (player.onGround) {
+    player.coyoteTimer = 0.1;
+    player.dashCharge = 1;
+  } else {
+    player.coyoteTimer = Math.max(0, player.coyoteTimer - dt);
+  }
+
+  if (isPressed('Space')) {
+    player.jumpBufferTimer = 0.12;
+  } else {
+    player.jumpBufferTimer = Math.max(0, player.jumpBufferTimer - dt);
+  }
+}
+
 function getSolidPlatforms(level) {
   const staticPlatforms = level.platforms || [];
   const movingPlatforms = level.movingPlatforms || [];
@@ -259,6 +298,7 @@ function updatePlayer(dt) {
   const level = currentLevel();
   const left = keysHeld.has('ArrowLeft') || keysHeld.has('KeyA');
   const right = keysHeld.has('ArrowRight') || keysHeld.has('KeyD');
+  const dash = isPressed('ShiftLeft') || isPressed('ShiftRight');
 
   if (left === right) {
     player.vx = 0;
@@ -267,12 +307,27 @@ function updatePlayer(dt) {
     player.facing = left ? -1 : 1;
   }
 
-  if (keysHeld.has('Space') && player.onGround) {
+  updatePlayerAdvancedMovement(dt);
+
+  if (player.jumpBufferTimer > 0 && (player.onGround || player.coyoteTimer > 0)) {
     player.vy = -player.jumpForce;
     player.onGround = false;
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
   }
 
-  player.vy += world.gravity * dt;
+  if (dash && player.onGround && player.dashCharge > 0 && player.dashCooldown <= 0) {
+    const dashDir = left ? -1 : (right ? 1 : player.facing);
+    player.vx = dashDir * 420;
+    player.vy = Math.min(player.vy, 40);
+    player.dashTimer = 0.08;
+    player.dashCooldown = 0.65;
+    player.dashCharge -= 1;
+    setStatus('Dash!');
+  }
+
+  const gravityScale = player.dashTimer > 0 ? 0.75 : 1;
+  player.vy += world.gravity * gravityScale * dt;
 
   const prevX = player.x;
   const prevY = player.y;
@@ -312,7 +367,16 @@ function updatePlayer(dt) {
     }
   }
 
-  if (enemy && overlap(player, enemy)) {
+  for (const enemy of enemies) {
+    if (enemy.defeated) continue;
+    if (!overlap(player, enemy)) continue;
+    const stomped = player.vy > 130 && (player.y + player.h - enemy.y) < 16;
+    if (stomped) {
+      enemy.defeated = true;
+      player.vy = -380;
+      setStatus('Enemy incapacitated!');
+      continue;
+    }
     restartLevel('Enemy got you!');
     return;
   }
@@ -383,40 +447,43 @@ function updatePlayer(dt) {
 }
 
 function updateEnemy(dt) {
-  if (!enemy || player.won) return;
+  if (!enemies.length || player.won) return;
 
   const playerCenterX = player.x + player.w / 2;
-  const enemyCenterX = enemy.x + enemy.w / 2;
-  const dist = Math.abs(playerCenterX - enemyCenterX);
+  for (const enemy of enemies) {
+    if (enemy.defeated) continue;
+    const enemyCenterX = enemy.x + enemy.w / 2;
+    const dist = Math.abs(playerCenterX - enemyCenterX);
 
-  if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
-    enemy.state = 'alert';
-  } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
-    enemy.state = 'reset';
-  } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
-    enemy.state = 'patrol';
-    enemy.direction = 1;
-  }
-
-  if (enemy.state === 'patrol') {
-    enemy.vx = enemy.speed * enemy.direction;
-    enemy.x += enemy.vx * dt;
-
-    if (enemy.x <= enemy.patrolMinX) {
-      enemy.x = enemy.patrolMinX;
+    if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
+      enemy.state = 'alert';
+    } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
+      enemy.state = 'reset';
+    } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
+      enemy.state = 'patrol';
       enemy.direction = 1;
-    } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
-      enemy.x = enemy.patrolMaxX - enemy.w;
-      enemy.direction = -1;
     }
-  } else if (enemy.state === 'alert') {
-    enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.55 : enemy.speed * 1.55;
-    enemy.x += enemy.vx * dt;
-    enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
-  } else if (enemy.state === 'reset') {
-    enemy.vx = -enemy.speed;
-    enemy.x += enemy.vx * dt;
-    if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+
+    if (enemy.state === 'patrol') {
+      enemy.vx = enemy.speed * enemy.direction;
+      enemy.x += enemy.vx * dt;
+
+      if (enemy.x <= enemy.patrolMinX) {
+        enemy.x = enemy.patrolMinX;
+        enemy.direction = 1;
+      } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
+        enemy.x = enemy.patrolMaxX - enemy.w;
+        enemy.direction = -1;
+      }
+    } else if (enemy.state === 'alert') {
+      enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.35 : enemy.speed * 1.35;
+      enemy.x += enemy.vx * dt;
+      enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
+    } else if (enemy.state === 'reset') {
+      enemy.vx = -enemy.speed;
+      enemy.x += enemy.vx * dt;
+      if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+    }
   }
 }
 
@@ -532,6 +599,16 @@ function drawPlayer() {
   // scarf accent
   ctx.fillStyle = '#ff8a5b';
   ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
+  // legs animation
+  const walk = Math.sin(performance.now() / 70) * 3 * (Math.abs(player.vx) > 10 ? 1 : 0.2);
+  ctx.fillStyle = '#1e5f85';
+  ctx.fillRect(px + 5, py + player.h - 8 + walk * 0.2, 6, 8);
+  ctx.fillRect(px + player.w - 11, py + player.h - 8 - walk * 0.2, 6, 8);
+  // dash trail
+  if (player.dashTimer > 0) {
+    ctx.fillStyle = 'rgba(130, 245, 255, 0.4)';
+    ctx.fillRect(px - player.facing * 10, py + 8, player.w, player.h - 8);
+  }
   // outline
   ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
@@ -539,43 +616,47 @@ function drawPlayer() {
 }
 
 function drawEnemy() {
-  if (!enemy) return;
+  if (!enemies.length) return;
+  for (const enemy of enemies) {
+    const colors = {
+      patrol: '#f2bd43',
+      alert: '#ff6b6b',
+      reset: '#89b6ff',
+      defeated: '#6f7688',
+    };
+    const stateColor = enemy.defeated ? colors.defeated : colors[enemy.state];
+    const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
+    const gradient = ctx.createRadialGradient(
+      enemy.x + enemy.w / 2,
+      enemy.y + enemy.h / 2,
+      4,
+      enemy.x + enemy.w / 2,
+      enemy.y + enemy.h / 2,
+      enemy.w / 2
+    );
+    gradient.addColorStop(0, '#fff8');
+    gradient.addColorStop(1, stateColor);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-  const colors = {
-    patrol: '#f2bd43',
-    alert: '#ff6b6b',
-    reset: '#89b6ff',
-  };
+    ctx.fillStyle = '#1b1f2e';
+    ctx.beginPath();
+    ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
+    ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
+    ctx.fill();
 
-  // slime body
-  const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
-  const gradient = ctx.createRadialGradient(
-    enemy.x + enemy.w / 2,
-    enemy.y + enemy.h / 2,
-    4,
-    enemy.x + enemy.w / 2,
-    enemy.y + enemy.h / 2,
-    enemy.w / 2
-  );
-  gradient.addColorStop(0, '#fff8');
-  gradient.addColorStop(1, colors[enemy.state]);
-  ctx.fillStyle = gradient;
-  ctx.beginPath();
-  ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
-  ctx.fill();
+    const mouthWidth = enemy.state === 'alert' ? 14 : 9;
+    const mouthY = enemy.y + enemy.h - 10 + Math.sin(performance.now() / 220) * 1.2;
+    ctx.fillStyle = '#2d1b1b';
+    ctx.fillRect(enemy.x + enemy.w / 2 - mouthWidth / 2, mouthY, mouthWidth, 3);
 
-  // eyes
-  ctx.fillStyle = '#1b1f2e';
-  ctx.beginPath();
-  ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
-  ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // alert spikes
-  if (enemy.state === 'alert') {
-    ctx.fillStyle = '#ffd2d2';
-    ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
-    ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+    if (enemy.state === 'alert' && !enemy.defeated) {
+      ctx.fillStyle = '#ffd2d2';
+      ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
+      ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+    }
   }
 }
 
@@ -583,11 +664,15 @@ function drawUI(level) {
   ctx.fillStyle = '#ffffff';
   ctx.font = '16px sans-serif';
   ctx.fillText(level.name, 16, 24);
-  ctx.fillText(`Enemy state: ${enemy.state.toUpperCase()}`, 16, 46);
+  const activeEnemies = enemies.filter((e) => !e.defeated).length;
+  const firstActive = enemies.find((e) => !e.defeated);
+  const enemyStateText = firstActive ? firstActive.state.toUpperCase() : 'DEFEATED';
+  ctx.fillText(`Enemy state: ${enemyStateText} | Active: ${activeEnemies}`, 16, 46);
   const totalRelics = (level.relics || []).length;
   const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
   ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump, E interact, R reset', 16, 90);
+  ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
+  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift dash, E interact, R reset', 16, 112);
 
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
