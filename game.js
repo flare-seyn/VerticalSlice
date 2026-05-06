@@ -59,6 +59,9 @@ const player = {
   dashTimer: 0,
   coyoteTimer: 0,
   jumpBufferTimer: 0,
+  animTime: 0,
+  animationState: 'idle',
+  graphPulseTimer: 0,
 };
 
 const levels = [
@@ -187,6 +190,8 @@ function resetEnemy() {
     state: 'patrol',
     direction: 1,
     defeated: false,
+    animTime: 0,
+    lastState: 'patrol',
   }));
 }
 
@@ -197,6 +202,12 @@ function resetPlayer(position, message) {
   player.vy = 0;
   player.onGround = false;
   player.won = false;
+  player.dashTimer = 0;
+  player.dashCooldown = 0;
+  player.dashCharge = 1;
+  player.animTime = 0;
+  player.animationState = 'idle';
+  player.graphPulseTimer = 0;
   setStatus(message);
 }
 
@@ -263,6 +274,8 @@ function updateDynamicFeatures(level, dt, nowMs) {
 }
 
 function updatePlayerAdvancedMovement(dt) {
+  player.animTime += dt;
+  if (player.graphPulseTimer > 0) player.graphPulseTimer -= dt;
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
@@ -316,6 +329,10 @@ function updatePlayer(dt) {
     player.jumpBufferTimer = 0;
   }
 
+  player.animationState = player.onGround
+    ? (Math.abs(player.vx) > 10 ? 'run' : 'idle')
+    : (player.vy < 0 ? 'jump' : 'fall');
+
   if (dash && player.onGround && player.dashCharge > 0 && player.dashCooldown <= 0) {
     const dashDir = left ? -1 : (right ? 1 : player.facing);
     player.vx = dashDir * 420;
@@ -323,6 +340,8 @@ function updatePlayer(dt) {
     player.dashTimer = 0.08;
     player.dashCooldown = 0.65;
     player.dashCharge -= 1;
+    player.animationState = 'dash';
+    player.graphPulseTimer = 0.35;
     setStatus('Dash!');
   }
 
@@ -411,7 +430,8 @@ function updatePlayer(dt) {
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
-        setStatus('Joystick pulled! Gate unlocked.');
+        player.graphPulseTimer = 0.7;
+        setStatus('Joystick pulled! Gate unlocked. Visual graph fired GateUnlock.');
       }
     }
   }
@@ -420,6 +440,7 @@ function updatePlayer(dt) {
     for (const relic of level.relics) {
       if (!relic.collected && overlap(player, relic)) {
         relic.collected = true;
+        player.graphPulseTimer = 0.25;
         const total = level.relics.length;
         const got = level.relics.filter((r) => r.collected).length;
         setStatus(`Relic collected (${got}/${total}).`);
@@ -452,15 +473,19 @@ function updateEnemy(dt) {
   const playerCenterX = player.x + player.w / 2;
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
+    enemy.animTime += dt;
     const enemyCenterX = enemy.x + enemy.w / 2;
     const dist = Math.abs(playerCenterX - enemyCenterX);
 
     if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
       enemy.state = 'alert';
+      enemy.lastState = 'patrol';
     } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
       enemy.state = 'reset';
+      enemy.lastState = 'alert';
     } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
       enemy.state = 'patrol';
+      enemy.lastState = 'reset';
       enemy.direction = 1;
     }
 
@@ -579,40 +604,116 @@ function drawLever(lever) {
 }
 
 function drawPlayer() {
-  const bob = Math.sin(performance.now() / 100) * 1.1;
+  const time = performance.now() / 1000;
+  const state = player.dashTimer > 0 ? 'dash' : player.animationState;
+  const isRunning = state === 'run';
+  const bob = Math.sin(time * (isRunning ? 13 : 4)) * (isRunning ? 2.2 : 0.8);
   const px = player.x;
   const py = player.y + bob;
-  const armor = ctx.createLinearGradient(px, py, px, py + player.h);
-  armor.addColorStop(0, '#83ecff');
-  armor.addColorStop(1, '#2d87bf');
+  const cx = px + player.w / 2;
+  const facing = player.facing;
+  const runCycle = Math.sin(time * 14) * (isRunning ? 1 : 0.18);
+  const armSwing = runCycle * 5;
+  const legSwing = runCycle * 5;
+  const squash = state === 'fall' ? 1.05 : (state === 'jump' ? 0.96 : 1);
 
-  // body
-  ctx.fillStyle = armor;
-  ctx.fillRect(px, py + 10, player.w, player.h - 10);
-  // head
-  ctx.fillStyle = '#d8fbff';
-  ctx.fillRect(px + 4, py, player.w - 8, 14);
-  // visor/eyes
-  ctx.fillStyle = '#10344a';
-  const eyeX = player.facing > 0 ? px + player.w - 14 : px + 6;
-  ctx.fillRect(eyeX, py + 4, 8, 4);
-  // scarf accent
-  ctx.fillStyle = '#ff8a5b';
-  ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
-  // legs animation
-  const walk = Math.sin(performance.now() / 70) * 3 * (Math.abs(player.vx) > 10 ? 1 : 0.2);
-  ctx.fillStyle = '#1e5f85';
-  ctx.fillRect(px + 5, py + player.h - 8 + walk * 0.2, 6, 8);
-  ctx.fillRect(px + player.w - 11, py + player.h - 8 - walk * 0.2, 6, 8);
-  // dash trail
-  if (player.dashTimer > 0) {
-    ctx.fillStyle = 'rgba(130, 245, 255, 0.4)';
-    ctx.fillRect(px - player.facing * 10, py + 8, player.w, player.h - 8);
+  ctx.save();
+  ctx.translate(cx, py + player.h / 2);
+  ctx.scale(facing, squash);
+  ctx.translate(-player.w / 2, -player.h / 2);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.beginPath();
+  ctx.ellipse(player.w / 2, player.h + 4, 18, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (state === 'dash') {
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(130, 245, 255, ${0.24 - i * 0.045})`;
+      ctx.fillRect(-12 - i * 9, 9 + i, player.w - i * 2, player.h - 13 - i * 2);
+    }
   }
-  // outline
+
+  // scarf and backpack sell the character as a more complex model.
+  ctx.strokeStyle = '#ff8a5b';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 17);
+  ctx.quadraticCurveTo(-8, 15 + Math.sin(time * 8) * 3, -18, 24 + Math.cos(time * 5) * 4);
+  ctx.stroke();
+  ctx.fillStyle = '#24455f';
+  ctx.fillRect(2, 16, 7, 18);
+  ctx.fillStyle = '#75e7ff';
+  ctx.fillRect(4, 19, 3, 9);
+
+  // legs with independent feet.
+  ctx.fillStyle = '#1e5f85';
+  ctx.fillRect(8, 30 + legSwing * 0.25, 6, 11);
+  ctx.fillRect(18, 30 - legSwing * 0.25, 6, 11);
+  ctx.fillStyle = '#143b55';
+  ctx.fillRect(6 + Math.max(0, -legSwing) * 0.2, 39, 10, 4);
+  ctx.fillRect(17 + Math.max(0, legSwing) * 0.2, 39, 10, 4);
+
+  // arms sit behind and in front of the torso, giving depth.
+  ctx.strokeStyle = '#2d87bf';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 18);
+  ctx.lineTo(3, 26 - armSwing);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(24, 18);
+  ctx.lineTo(28, 26 + armSwing);
+  ctx.stroke();
+  ctx.fillStyle = '#d8fbff';
+  ctx.beginPath();
+  ctx.arc(3, 27 - armSwing, 2.8, 0, Math.PI * 2);
+  ctx.arc(28, 27 + armSwing, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const armor = ctx.createLinearGradient(0, 8, 0, player.h);
+  armor.addColorStop(0, '#9af3ff');
+  armor.addColorStop(0.55, '#2d87bf');
+  armor.addColorStop(1, '#1b5f91');
+  ctx.fillStyle = armor;
+  ctx.fillRect(5, 12, player.w - 10, 23);
+  ctx.fillStyle = '#d8fbff';
+  ctx.fillRect(7, 1, player.w - 14, 15);
+  ctx.fillStyle = '#c4f7ff';
+  ctx.fillRect(10, -2, player.w - 20, 5);
+  ctx.fillStyle = '#10344a';
+  ctx.fillRect(15, 5, 11, 5);
+  ctx.fillStyle = '#ffffffaa';
+  ctx.fillRect(17, 6, 4, 1.5);
+
+  // chest plate, belt, shoulder pads, and boot jets add visible model complexity.
+  ctx.fillStyle = '#b8f7ff';
+  ctx.fillRect(10, 16, 10, 8);
+  ctx.fillStyle = '#ffcf69';
+  ctx.fillRect(14, 18, 3, 3);
+  ctx.fillStyle = '#0f1b2a';
+  ctx.fillRect(7, 27, player.w - 14, 3);
+  ctx.fillStyle = '#71dfff';
+  ctx.fillRect(3, 13, 7, 5);
+  ctx.fillRect(player.w - 10, 13, 7, 5);
+
+  if (!player.onGround || state === 'dash') {
+    ctx.fillStyle = state === 'dash' ? '#fff3a3' : '#8ff7ff';
+    ctx.beginPath();
+    ctx.moveTo(9, 43);
+    ctx.lineTo(12, 50 + Math.sin(time * 32) * 3);
+    ctx.lineTo(15, 43);
+    ctx.moveTo(19, 43);
+    ctx.lineTo(22, 50 + Math.cos(time * 29) * 3);
+    ctx.lineTo(25, 43);
+    ctx.fill();
+  }
+
   ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
-  ctx.strokeRect(px, py, player.w, player.h);
+  ctx.strokeRect(5, 12, player.w - 10, 23);
+  ctx.strokeRect(7, 1, player.w - 14, 15);
+  ctx.restore();
 }
 
 function drawEnemy() {
@@ -625,39 +726,114 @@ function drawEnemy() {
       defeated: '#6f7688',
     };
     const stateColor = enemy.defeated ? colors.defeated : colors[enemy.state];
-    const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
-    const gradient = ctx.createRadialGradient(
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      4,
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      enemy.w / 2
-    );
+    const time = performance.now() / 1000 + enemy.x * 0.01;
+    const pulse = 1 + Math.sin(time * (enemy.state === 'alert' ? 9 : 5)) * 0.07;
+    const legStride = Math.sin(time * 12) * (enemy.state === 'alert' ? 4 : 2);
+    const cx = enemy.x + enemy.w / 2;
+    const cy = enemy.y + enemy.h / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, enemy.y + enemy.h + 4, enemy.w / 2, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Animated legs and feet make the patrol/chase state easier to read.
+    ctx.strokeStyle = '#2d1b1b';
+    ctx.lineWidth = 4;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 7, enemy.y + enemy.h - 6);
+      ctx.lineTo(cx + side * (8 + legStride), enemy.y + enemy.h + 5);
+      ctx.stroke();
+      ctx.fillStyle = '#2d1b1b';
+      ctx.fillRect(cx + side * (8 + legStride) - 4, enemy.y + enemy.h + 4, 8, 3);
+    }
+
+    const gradient = ctx.createRadialGradient(cx - 5, cy - 7, 4, cx, cy, enemy.w / 2 + 8);
     gradient.addColorStop(0, '#fff8');
-    gradient.addColorStop(1, stateColor);
+    gradient.addColorStop(0.55, stateColor);
+    gradient.addColorStop(1, '#3b2230');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + 2, (enemy.w / 2) * pulse, (enemy.h / 2 + 4) * pulse, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#1b1f2e';
+    // Horns/antennae, armor ring, eyes, and jaw add monster model detail.
+    ctx.strokeStyle = stateColor;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
-    ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
+    ctx.moveTo(cx - 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx - 18, enemy.y - 10, cx - 5, enemy.y - 3);
+    ctx.moveTo(cx + 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx + 18, enemy.y - 10, cx + 5, enemy.y - 3);
+    ctx.stroke();
+    ctx.strokeStyle = '#1b1f2e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 2, enemy.w / 2 - 2, 0.2, Math.PI * 1.8);
+    ctx.stroke();
+
+    ctx.fillStyle = enemy.state === 'alert' ? '#2d1b1b' : '#1b1f2e';
+    ctx.beginPath();
+    ctx.ellipse(enemy.x + 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(enemy.x + enemy.w - 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#ffffffaa';
+    ctx.fillRect(enemy.x + 10, enemy.y + 12, 2, 1.5);
+    ctx.fillRect(enemy.x + enemy.w - 12, enemy.y + 12, 2, 1.5);
 
-    const mouthWidth = enemy.state === 'alert' ? 14 : 9;
-    const mouthY = enemy.y + enemy.h - 10 + Math.sin(performance.now() / 220) * 1.2;
+    const mouthWidth = enemy.state === 'alert' ? 16 : 10;
+    const mouthY = enemy.y + enemy.h - 10 + Math.sin(time * 7) * 1.4;
     ctx.fillStyle = '#2d1b1b';
-    ctx.fillRect(enemy.x + enemy.w / 2 - mouthWidth / 2, mouthY, mouthWidth, 3);
-
+    ctx.fillRect(cx - mouthWidth / 2, mouthY, mouthWidth, 3);
     if (enemy.state === 'alert' && !enemy.defeated) {
       ctx.fillStyle = '#ffd2d2';
-      ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
-      ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+      ctx.fillRect(cx - 6, mouthY + 3, 3, 5);
+      ctx.fillRect(cx + 3, mouthY + 3, 3, 5);
     }
+
+    ctx.restore();
   }
+}
+
+function drawVisualGraphStatus() {
+  const x = 710;
+  const y = 18;
+  const pulse = Math.max(0, player.graphPulseTimer);
+  const alpha = 0.72 + Math.min(0.24, pulse * 0.3);
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(12, 17, 29, 0.78)';
+  ctx.fillRect(x, y, 232, 84);
+  ctx.strokeStyle = pulse > 0 ? '#8ff7ff' : '#4e5872';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, 232, 84);
+  ctx.fillStyle = '#d8fbff';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Visual Graph Bridge', x + 10, y + 18);
+
+  const nodes = [
+    { label: 'Collect', nx: x + 18, ny: y + 42, active: pulse > 0.2 },
+    { label: 'GateUnlock', nx: x + 91, ny: y + 42, active: pulse > 0.45 },
+    { label: 'FX/UI', nx: x + 178, ny: y + 42, active: pulse > 0 },
+  ];
+  ctx.strokeStyle = pulse > 0 ? '#8ff7ff' : '#6d7690';
+  ctx.beginPath();
+  ctx.moveTo(nodes[0].nx + 46, nodes[0].ny + 10);
+  ctx.lineTo(nodes[1].nx - 6, nodes[1].ny + 10);
+  ctx.moveTo(nodes[1].nx + 70, nodes[1].ny + 10);
+  ctx.lineTo(nodes[2].nx - 6, nodes[2].ny + 10);
+  ctx.stroke();
+  for (const node of nodes) {
+    ctx.fillStyle = node.active ? '#173d4f' : '#252d43';
+    ctx.fillRect(node.nx, node.ny, node.label === 'GateUnlock' ? 70 : 50, 22);
+    ctx.strokeStyle = node.active ? '#8ff7ff' : '#58637d';
+    ctx.strokeRect(node.nx, node.ny, node.label === 'GateUnlock' ? 70 : 50, 22);
+    ctx.fillStyle = node.active ? '#ffffff' : '#c4cbda';
+    ctx.fillText(node.label, node.nx + 5, node.ny + 15);
+  }
+  ctx.restore();
 }
 
 function drawUI(level) {
@@ -672,7 +848,7 @@ function drawUI(level) {
   const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
   ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
   ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift dash, E interact, R reset', 16, 112);
+  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift ground dash, E interact, R reset', 16, 112);
 
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
@@ -703,6 +879,7 @@ function draw() {
   drawEnemy();
   drawPlayer();
   drawUI(level);
+  drawVisualGraphStatus();
 }
 
 let lastTime = performance.now();
