@@ -44,13 +44,14 @@ const state = {
   clueRead: false,
   sealOpened: false,
   bossSpawned: false,
+  bossPrimed: false,
   won: false,
   lose: false,
   msg: 'Find the correct sigil to unseal the door.',
   enemies: [
     { room: 'trap', x: 760, y: 290, r: 12, hp: 35, speed: 70, state: 'patrol', patrolA: 730, patrolB: 840, dir: 1, detect: 120 },
   ],
-  boss: { room: 'final', x: 780, y: 500, r: 18, hp: 90, alive: true, cooldown: 0, windup: 0 },
+  boss: { room: 'final', x: 810, y: 500, r: 18, hp: 90, alive: true, cooldown: 0, windup: 0 },
   traps: [
     { room: 'trap', x: 720, y: 260, w: 120, h: 16, phase: 0 },
   ],
@@ -67,6 +68,14 @@ function setStatus(t) { state.msg = t; statusEl.textContent = t; }
 function isPressed(code) { return keysPressed.has(code); }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function inRect(p, r) { return p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h; }
+function objectiveText() {
+  if (!state.clueRead) return 'Objective: Read the clue tablet in Exploration Room A.';
+  if (!state.hasSigil) return 'Objective: Find the Azure Sigil in the key room.';
+  if (!state.sealOpened) return 'Objective: Return to the runeseal room and interact.';
+  if (!state.bossPrimed) return 'Objective: Interact with the ritual altar to start miniboss.';
+  if (!state.won) return 'Objective: Defeat the miniboss.';
+  return 'Objective: Escape complete.';
+}
 
 function changeRoom(id, spawn) {
   state.room = id;
@@ -93,6 +102,7 @@ function restartGame() {
   state.clueRead = false;
   state.sealOpened = false;
   state.bossSpawned = false;
+  state.bossPrimed = false;
   state.won = false;
   state.lose = false;
   state.items.potion.taken = false;
@@ -137,7 +147,7 @@ function update(dt) {
         changeRoom(d.to, d.spawn);
         if (d.to === 'final' && !state.bossSpawned) {
           state.bossSpawned = true;
-          setStatus('Miniboss awakens! Defeat it to win.');
+          setStatus('Final room reached. Interact with altar when ready.');
         }
       }
     }
@@ -176,9 +186,9 @@ function update(dt) {
 
   for (const t of state.traps) {
     if (t.room !== state.room) continue;
-    t.phase += dt * 2.1;
-    const active = Math.sin(t.phase) > 0.25;
-    if (active && inRect(player, t)) hurt(12, 'trap');
+    t.phase += dt * 1.6;
+    const active = Math.sin(t.phase) > 0.4;
+    if (active && inRect(player, t)) hurt(7, 'trap');
   }
 
   for (const e of state.enemies) {
@@ -200,10 +210,15 @@ function update(dt) {
       e.x += (e.patrolA - e.x) * 0.03;
     }
 
-    if (dist(player, e) < player.r + e.r) hurt(9, 'enemy');
+    if (dist(player, e) < player.r + e.r) hurt(6, 'enemy');
   }
 
-  if (state.room === state.boss.room && state.boss.alive) {
+  if (state.room === state.boss.room && !state.bossPrimed && isPressed('KeyE')) {
+    state.bossPrimed = true;
+    setStatus('Ritual started. Miniboss awakens!');
+  }
+
+  if (state.room === state.boss.room && state.boss.alive && state.bossPrimed) {
     const b = state.boss;
     b.cooldown -= dt;
     if (b.cooldown <= 0) {
@@ -212,7 +227,7 @@ function update(dt) {
     }
     if (b.windup > 0) {
       b.windup -= dt;
-      if (b.windup <= 0 && dist(player, b) < 95) hurt(18, 'miniboss slam');
+      if (b.windup <= 0 && dist(player, b) < 95) hurt(14, 'miniboss slam');
     }
     const bd = dist(player, b);
     const vx = (player.x - b.x) / (bd || 1);
@@ -229,7 +244,7 @@ function update(dt) {
         setStatus('Enemy hit.');
       }
     }
-    if (state.room === state.boss.room && state.boss.alive && dist(player, state.boss) < 46) {
+    if (state.room === state.boss.room && state.boss.alive && state.bossPrimed && dist(player, state.boss) < 46) {
       state.boss.hp -= 12;
       setStatus(`Miniboss hit (${Math.max(0, state.boss.hp)} HP).`);
       if (state.boss.hp <= 0) {
@@ -282,22 +297,39 @@ function draw() {
     ctx.beginPath(); ctx.moveTo(state.items.sigil.x, state.items.sigil.y - 10); ctx.lineTo(state.items.sigil.x + 10, state.items.sigil.y); ctx.lineTo(state.items.sigil.x, state.items.sigil.y + 10); ctx.lineTo(state.items.sigil.x - 10, state.items.sigil.y); ctx.closePath(); ctx.fill();
   }
 
-  // enemies
+  // enemies (humanoid cultist style)
   for (const e of state.enemies) {
     if (e.hp <= 0) continue;
     const color = e.state === 'alert' ? '#ff6b6b' : e.state === 'reset' ? '#89b6ff' : '#f2bd43';
     ctx.fillStyle = color;
-    ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(e.x - 8, e.y - 8, 16, 20); // body
+    ctx.fillStyle = '#f7d7b4';
+    ctx.beginPath(); ctx.arc(e.x, e.y - 12, 6, 0, Math.PI * 2); ctx.fill(); // head
+    ctx.fillStyle = '#2a1c1c';
+    ctx.fillRect(e.x - 6, e.y + 12, 4, 8);
+    ctx.fillRect(e.x + 2, e.y + 12, 4, 8);
   }
 
-  if (state.boss.alive) {
+  if (state.boss.alive && state.bossPrimed) {
     ctx.fillStyle = state.boss.windup > 0 ? '#ff3f7e' : '#8f61ff';
-    ctx.beginPath(); ctx.arc(state.boss.x, state.boss.y, state.boss.r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(state.boss.x - 14, state.boss.y - 12, 28, 34);
+    ctx.fillStyle = '#d9ccff';
+    ctx.beginPath(); ctx.arc(state.boss.x, state.boss.y - 16, 8, 0, Math.PI * 2); ctx.fill();
+  } else if (state.room === 'final' && !state.bossPrimed) {
+    ctx.fillStyle = '#5dd7ff';
+    ctx.fillRect(748, 494, 24, 12);
+    ctx.fillStyle = '#c8f4ff';
+    ctx.fillText('Press E at altar', 740, 488);
   }
 
-  // player
+  // player (more human-like)
   ctx.fillStyle = player.iFrames > 0 ? '#ffe9a1' : '#9ae6ff';
-  ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(player.x - 7, player.y - 6, 14, 18);
+  ctx.fillStyle = '#ffe2c2';
+  ctx.beginPath(); ctx.arc(player.x, player.y - 10, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#24536f';
+  ctx.fillRect(player.x - 6, player.y + 12, 4, 7);
+  ctx.fillRect(player.x + 2, player.y + 12, 4, 7);
 
   // HUD
   ctx.fillStyle = '#ffffff';
@@ -305,6 +337,8 @@ function draw() {
   ctx.fillText(`Room: ${state.room.toUpperCase()}  HP: ${state.hp}/${state.maxHp}`, 14, 22);
   ctx.fillText(`Sigil: ${state.hasSigil ? 'YES' : 'NO'}  Potion: ${state.hasPotion ? 'YES' : 'NO'}  Clue: ${state.clueRead ? 'READ' : 'UNREAD'}`, 14, 42);
   ctx.fillText('Controls: Move WASD/Arrows | E interact/use potion | Space attack | R restart', 14, 62);
+  ctx.fillStyle = '#ffe9a1';
+  ctx.fillText(objectiveText(), 14, 82);
 }
 
 let last = performance.now();
