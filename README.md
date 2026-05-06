@@ -4,14 +4,14 @@
 This repository now includes a playable Milestone 1 web prototype with the required core scope:
 - Player can move left/right and jump.
 - Test levels have platforming obstacles (gaps + spikes).
-- Player can reach a first gate, then complete a second level.
+- Player can reach progression gates across four levels, then complete the final gauntlet.
 - Enemy uses a behavior state machine with **Patrol → Alert → Reset**.
 - Includes interactive **joystick/lever pulls** to unlock progression gates.
 - Player and enemy use more polished, distinct visual materials/styles.
 - Player and enemy models now include layered parts and richer animation states for idle, run, jump/fall, dash, patrol, alert, reset, and defeated reads.
 - Moved the Visual Scripting bridge explanation outside the gameplay canvas so the game screen only shows tutorial prompts.
 - Added audio effects, particle VFX, ambient VFX, and decorative tilemap layers for stronger polish.
-- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, and collectible relic objectives.
+- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, and collectible relic objectives.
 - Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
 
 ## Run Locally
@@ -30,7 +30,7 @@ Then open: `http://localhost:8000`
 - `E`: Interact (pull lever/joystick)
 - `R`: Reset/restart current level
 
-Goal: collect relics in each stage, then pull that stage’s joystick to unlock its gate and progress.
+Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
 
 ## State Machine (MS1)
 Enemy behavior uses three states:
@@ -89,11 +89,11 @@ The state machine is connected to other systems in the game. It depends on the *
 ## Milestone 2 Devlog
 
 ### ANSWER THIS BEFORE CODING: Complicating gameplay summary and task break-down
-For this milestone, I built on the existing relic-gated joystick mechanic and polished it into a clearer **relic-gated unlock loop with graph-driven feedback**. The complicating gameplay factor is that the player cannot simply run to the exit: they must collect every relic, survive dynamic platforming obstacles, return to the joystick lever, and trigger the gate unlock while enemy state-machine pressure continues to matter.
+For this milestone, I built on the existing relic-gated joystick mechanic and polished it into a clearer **multi-route unlock loop with graph-driven feedback documented in the devlog**. The complicating gameplay factor is that the player cannot simply run to the exit: they must collect relics, survive dynamic platforming obstacles, use dash-refresh orbs and bounce pads, sometimes defeat enemies, return to the joystick lever, and trigger the gate unlock while enemy state-machine pressure continues to matter.
 
 1. **Make the relic-gated joystick loop easier to read and preserve the existing gameplay.**
    - Keep the Milestone 1 movement, jumping, reset flow, and enemy Patrol → Alert → Reset state machine working.
-   - Keep each level's relic requirement connected to the joystick lever so the gate only opens after all relics are collected.
+   - Keep joystick gates connected to unlock requirements, while adding later chambers that can unlock through relic collection, enemy defeat, or both.
    - Add clearer status feedback when the player collects relics, lacks relics, or unlocks the gate.
    - Verify that hazards, enemy collisions, stomp defeat, level transitions, and final win state still behave correctly.
 
@@ -105,7 +105,7 @@ For this milestone, I built on the existing relic-gated joystick mechanic and po
 
 3. **Integrate the chosen visual-scripting-style system and additional polish outside the core game UI.**
    - Keep graph labels and explanation outside the gameplay canvas so the player only sees tutorial prompts while playing.
-   - Trigger code-side feedback from relic collection, dash, bounce pads, enemy alerts, hazards, and joystick unlock events.
+   - Trigger code-side feedback from relic collection, dash, dash-refresh orbs, bounce pads, enemy alerts, hazards, and joystick unlock events.
    - Add audio effects, particle VFX, ambient VFX, and tilemap-like decorative layers without changing collision balance.
    - Document the intended Unity bridge as custom events moving between gameplay scripts and a Visual Scripting Graph, and include the graph screenshot asset for submission.
 
@@ -113,7 +113,7 @@ For this milestone, I built on the existing relic-gated joystick mechanic and po
 The W5 task steps break-down helped because it forced me to separate the feature into testable chunks instead of treating “polish” as one vague task. The biggest benefit was preserving the already-working Milestone 1 requirements first, then layering visual and feedback complexity on top of the same collision boxes. If I did it again, I would improve the break-down by adding more explicit acceptance checks, such as “gate stays locked at 1/2 relics,” “enemy still changes to Alert near the player,” and “dash does not recharge in air.” That would make each task easier to verify after implementation.
 
 ### Visual scripting and code bridge
-The playable web build bridges code and a graph-style system through code-side gameplay events plus documentation outside the gameplay canvas. The code-side gameplay methods update relic collection, dash, bounce, hazard, enemy alert, and joystick unlock state; those events now trigger audio cues and particle VFX in `game.js`, while the Visual Scripting Graph itself is documented outside the game screen in the devlog/HTML page and in `docs/visual-scripting-graph.svg`. This serves the same architectural purpose as calling a Unity Visual Scripting custom event from C# after gameplay logic succeeds: gameplay code owns rules and collision, while the graph owns readable feedback/FX routing.
+The playable web build bridges code and a graph-style system through code-side gameplay events plus documentation outside the gameplay canvas. The code-side gameplay methods update relic collection, dash, dash-refresh orbs, bounce, hazard, enemy alert, and joystick unlock state; those events now trigger audio cues and particle VFX in `game.js`, while the Visual Scripting Graph itself is documented only in the devlog and in `docs/visual-scripting-graph.svg`. This serves the same architectural purpose as calling a Unity Visual Scripting custom event from C# after gameplay logic succeeds: gameplay code owns rules and collision, while the graph owns readable feedback/FX routing.
 
 For the Unity version, the equivalent C# scripts would be:
 - `PlayerController.cs`: owns movement, jump buffering, dash state, and calls the graph event when dash feedback should play.
@@ -123,7 +123,7 @@ For the Unity version, the equivalent C# scripts would be:
 The relevant Graph screenshot is included at [`docs/visual-scripting-graph.svg`](docs/visual-scripting-graph.svg).
 
 ### Unity system integration note
-The chosen Unity system for the intended Unity build is **Unity Visual Scripting**. In this repository's HTML5 prototype, that system is represented by the external graph documentation plus gameplay events that route to audio/VFX feedback, so the architecture can be demonstrated without adding extra non-tutorial text to the game screen. The implemented flow mirrors a Visual Scripting Graph receiving custom gameplay events from code and routing feedback to UI/FX.
+The chosen Unity system for the intended Unity build is **Unity Visual Scripting**. In this repository's HTML5 prototype, that system is represented by devlog-only graph documentation plus gameplay events that route to audio/VFX feedback, so the architecture can be demonstrated without adding extra non-tutorial text to the game screen or the index page. The implemented flow mirrors a Visual Scripting Graph receiving custom gameplay events from code and routing feedback to UI/FX.
 
 
 ## Milestone 3 Devlog

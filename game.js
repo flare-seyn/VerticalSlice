@@ -238,6 +238,7 @@ const levels = [
       { x: 510, y: 360, w: 86, h: 16, axis: 'x', origin: 510, range: 90, speed: 1.6, phase: 0.6 },
     ],
     bouncePads: [{ x: 715, y: 442, w: 38, h: 18, force: 980 }],
+    dashOrbs: [{ x: 544, y: 320, r: 10, active: true, timer: 0 }],
     crumblePlatforms: [
       { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
     ],
@@ -247,7 +248,7 @@ const levels = [
       { x: 838, y: 472, w: 14, h: 14, collected: false },
     ],
     lever: { x: 340, y: 410, w: 18, h: 40, pulled: false, promptRange: 66 },
-    gate: { x: 900, y: 445, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    gate: { x: 900, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
     enemies: [
       {
         spawnX: 640,
@@ -273,6 +274,153 @@ const levels = [
       },
     ],
   },
+
+  {
+    name: 'Level 3: Split Route Atrium',
+    start: { x: 32, y: 430 },
+    unlockMode: 'relicsOrEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 104, type: 'wall' },
+      { x: 110, y: 130, w: 160, h: 32, type: 'trim' },
+      { x: 420, y: 124, w: 180, h: 32, type: 'wall' },
+      { x: 710, y: 126, w: 180, h: 32, type: 'trim' },
+      { x: 450, y: 452, w: 90, h: 32, type: 'crystal' },
+      { x: 760, y: 372, w: 96, h: 32, type: 'crystal' },
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 180, h: 40 },
+      { x: 240, y: 470, w: 140, h: 20 },
+      { x: 440, y: 430, w: 120, h: 20 },
+      { x: 650, y: 390, w: 120, h: 20 },
+      { x: 830, y: 500, w: 130, h: 40 },
+      { x: 130, y: 345, w: 130, h: 20 },
+      { x: 340, y: 305, w: 120, h: 20 },
+    ],
+    spikes: [
+      { x: 190, y: 500, w: 42, h: 40 },
+      { x: 575, y: 500, w: 48, h: 40 },
+      { x: 780, y: 500, w: 42, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 520, y: 330, w: 84, h: 16, axis: 'y', origin: 330, range: 52, speed: 1.5, phase: 0.1 },
+      { x: 690, y: 455, w: 90, h: 16, axis: 'x', origin: 690, range: 65, speed: 1.4, phase: 1.1 },
+    ],
+    bouncePads: [{ x: 148, y: 327, w: 38, h: 18, force: 930 }],
+    dashOrbs: [
+      { x: 395, y: 280, r: 10, active: true, timer: 0 },
+      { x: 708, y: 360, r: 10, active: true, timer: 0 },
+    ],
+    crumblePlatforms: [
+      { x: 275, y: 385, w: 76, h: 16, state: 'solid', timer: 0 },
+      { x: 590, y: 350, w: 78, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 150, y: 315, w: 14, h: 14, collected: false },
+      { x: 365, y: 278, w: 14, h: 14, collected: false },
+      { x: 688, y: 362, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 848, y: 460, w: 18, h: 40, pulled: false, promptRange: 72 },
+    gate: { x: 912, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemies: [
+      {
+        spawnX: 452,
+        y: 396,
+        w: 34,
+        h: 34,
+        speed: 78,
+        patrolMinX: 430,
+        patrolMaxX: 558,
+        detectionRange: 115,
+        resetRange: 190,
+      },
+      {
+        spawnX: 672,
+        y: 356,
+        w: 34,
+        h: 34,
+        speed: 80,
+        patrolMinX: 650,
+        patrolMaxX: 770,
+        detectionRange: 120,
+        resetRange: 195,
+      },
+    ],
+  },
+  {
+    name: 'Level 4: Exit Gauntlet',
+    start: { x: 36, y: 430 },
+    unlockMode: 'relicsAndEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
+      { x: 72, y: 135, w: 210, h: 32, type: 'trim' },
+      { x: 384, y: 126, w: 170, h: 32, type: 'wall' },
+      { x: 642, y: 134, w: 228, h: 32, type: 'trim' },
+      { x: 210, y: 452, w: 80, h: 32, type: 'crystal' },
+      { x: 610, y: 392, w: 110, h: 32, type: 'crystal' },
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 170, h: 40 },
+      { x: 230, y: 465, w: 120, h: 20 },
+      { x: 420, y: 430, w: 110, h: 20 },
+      { x: 620, y: 390, w: 120, h: 20 },
+      { x: 815, y: 350, w: 145, h: 20 },
+      { x: 820, y: 500, w: 140, h: 40 },
+    ],
+    spikes: [
+      { x: 175, y: 500, w: 42, h: 40 },
+      { x: 365, y: 500, w: 45, h: 40 },
+      { x: 545, y: 500, w: 50, h: 40 },
+      { x: 735, y: 500, w: 55, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 250, y: 345, w: 82, h: 16, axis: 'y', origin: 345, range: 58, speed: 1.7, phase: 0.4 },
+      { x: 535, y: 310, w: 86, h: 16, axis: 'x', origin: 535, range: 86, speed: 1.9, phase: 0.2 },
+    ],
+    bouncePads: [
+      { x: 246, y: 447, w: 38, h: 18, force: 940 },
+      { x: 838, y: 332, w: 38, h: 18, force: 890 },
+    ],
+    dashOrbs: [
+      { x: 288, y: 322, r: 10, active: true, timer: 0 },
+      { x: 575, y: 286, r: 10, active: true, timer: 0 },
+      { x: 855, y: 318, r: 10, active: true, timer: 0 },
+    ],
+    crumblePlatforms: [
+      { x: 450, y: 350, w: 78, h: 16, state: 'solid', timer: 0 },
+      { x: 700, y: 305, w: 76, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 260, y: 435, w: 14, h: 14, collected: false },
+      { x: 570, y: 282, w: 14, h: 14, collected: false },
+      { x: 875, y: 322, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 838, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemies: [
+      {
+        spawnX: 430,
+        y: 396,
+        w: 34,
+        h: 34,
+        speed: 82,
+        patrolMinX: 420,
+        patrolMaxX: 530,
+        detectionRange: 120,
+        resetRange: 190,
+      },
+      {
+        spawnX: 650,
+        y: 356,
+        w: 34,
+        h: 34,
+        speed: 88,
+        patrolMinX: 620,
+        patrolMaxX: 740,
+        detectionRange: 130,
+        resetRange: 205,
+      },
+    ],
+  },
 ];
 
 let currentLevelIndex = 0;
@@ -291,6 +439,30 @@ function overlap(a, b) {
     a.x + a.w > b.x &&
     a.y < b.y + b.h &&
     a.y + a.h > b.y;
+}
+
+
+function getUnlockProgress(level) {
+  const totalRelics = (level.relics || []).length;
+  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+  const activeEnemies = enemies.filter((e) => !e.defeated).length;
+  return { totalRelics, collectedRelics, activeEnemies };
+}
+
+function canUnlockLevel(level) {
+  const { totalRelics, collectedRelics, activeEnemies } = getUnlockProgress(level);
+  const allRelics = collectedRelics >= totalRelics;
+  if (level.unlockMode === 'relicsOrEnemies') return allRelics || activeEnemies === 0;
+  if (level.unlockMode === 'relicsAndEnemies') return allRelics && activeEnemies === 0;
+  return allRelics;
+}
+
+function getUnlockHint(level) {
+  const { totalRelics, collectedRelics, activeEnemies } = getUnlockProgress(level);
+  if (canUnlockLevel(level)) return 'Press E';
+  if (level.unlockMode === 'relicsOrEnemies') return `${collectedRelics}/${totalRelics} relics or defeat enemies`;
+  if (level.unlockMode === 'relicsAndEnemies') return `${collectedRelics}/${totalRelics} relics + ${activeEnemies} enemies`;
+  return `${collectedRelics}/${totalRelics} relics`;
 }
 
 function resetEnemy() {
@@ -342,6 +514,12 @@ function loadLevel(index, message) {
       p.timer = 0;
     });
   }
+  if (level.dashOrbs) {
+    level.dashOrbs.forEach((orb) => {
+      orb.active = true;
+      orb.timer = 0;
+    });
+  }
   resetEnemy();
   resetPlayer(level.start, message || `${level.name}. Reach the gate.`);
 }
@@ -357,6 +535,12 @@ function restartLevel(message = 'Level reset.') {
       p.timer = 0;
     });
   }
+  if (level.dashOrbs) {
+    level.dashOrbs.forEach((orb) => {
+      orb.active = true;
+      orb.timer = 0;
+    });
+  }
   resetEnemy();
   resetPlayer(level.start, `${message} ${level.name}`);
 }
@@ -370,6 +554,16 @@ function updateDynamicFeatures(level, dt, nowMs) {
     for (const mp of level.movingPlatforms) {
       const offset = Math.sin(nowMs / 1000 * mp.speed + mp.phase) * mp.range;
       if (mp.axis === 'x') mp.x = mp.origin + offset;
+      if (mp.axis === 'y') mp.y = mp.origin + offset;
+    }
+  }
+
+  if (level.dashOrbs) {
+    for (const orb of level.dashOrbs) {
+      if (!orb.active) {
+        orb.timer -= dt;
+        if (orb.timer <= 0) orb.active = true;
+      }
     }
   }
 
@@ -420,7 +614,7 @@ function getSolidPlatforms(level) {
 
 function updatePlayer(dt) {
   if (isPressed('KeyR')) {
-    loadLevel(currentLevelIndex, 'Manual reset.');
+    loadLevel(player.won ? 0 : currentLevelIndex, player.won ? 'New run started.' : 'Manual reset.');
     return;
   }
 
@@ -538,6 +732,23 @@ function updatePlayer(dt) {
     }
   }
 
+
+  if (level.dashOrbs) {
+    for (const orb of level.dashOrbs) {
+      const orbBox = { x: orb.x - orb.r, y: orb.y - orb.r, w: orb.r * 2, h: orb.r * 2 };
+      if (orb.active && overlap(player, orbBox)) {
+        orb.active = false;
+        orb.timer = 2.5;
+        player.dashCharge = 1;
+        player.dashCooldown = 0;
+        player.vy = Math.min(player.vy, -120);
+        playSound('collect');
+        spawnParticles(orb.x, orb.y, 18, '#8ff7ff', { speed: 110, life: 0.42, size: 4 });
+        setStatus('Dash orb refreshed.');
+      }
+    }
+  }
+
   if (player.y > world.height + 80) {
     restartLevel('You fell!');
     return;
@@ -552,10 +763,8 @@ function updatePlayer(dt) {
     };
 
     if (overlap(player, leverZone) && !level.lever.pulled && isPressed('KeyE')) {
-      const totalRelics = level.relics ? level.relics.length : 0;
-      const collectedRelics = level.relics ? level.relics.filter((r) => r.collected).length : 0;
-      if (collectedRelics < totalRelics) {
-        setStatus(`Need more relics (${collectedRelics}/${totalRelics}) before pulling joystick.`);
+      if (!canUnlockLevel(level)) {
+        setStatus(`Unlock route: ${getUnlockHint(level)}.`);
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
@@ -581,19 +790,20 @@ function updatePlayer(dt) {
 
   if (overlap(player, level.gate)) {
     if (level.gate.locked) {
-      setStatus('Gate locked. Pull the joystick lever with E.');
+      setStatus(`Gate locked. ${getUnlockHint(level)}, then pull the joystick.`);
       player.x = prevX;
       return;
     }
 
     if (level.gate.type === 'next') {
-      loadLevel(currentLevelIndex + 1, 'Level complete! Welcome to Level 2. Pull the lever to unlock the gate.');
+      const nextLevel = levels[currentLevelIndex + 1];
+      loadLevel(currentLevelIndex + 1, `Level complete! ${nextLevel.name}. Find an unlock route.`);
       return;
     }
 
     if (level.gate.type === 'finish') {
       player.won = true;
-      setStatus('You cleared both levels! Press R to replay from this level.');
+      setStatus('You cleared all levels! Press R to start a new run.');
     }
   }
 }
@@ -725,6 +935,27 @@ function drawBouncePads(bouncePads) {
     ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
     ctx.fillStyle = '#173d2a';
     ctx.fillRect(pad.x + 3, pad.y + 3, pad.w - 6, 4);
+  }
+}
+
+
+function drawDashOrbs(orbs) {
+  const time = performance.now() / 1000;
+  for (const orb of orbs || []) {
+    const alpha = orb.active ? 1 : 0.25;
+    const pulse = Math.sin(time * 7 + orb.x * 0.01) * 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = '#8ff7ff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, orb.r + pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#d8fbff';
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, Math.max(3, orb.r - 4 + pulse * 0.4), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -979,17 +1210,17 @@ function drawTutorialGuides(level) {
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
     if (nearLever) {
-      const totalRelics = (level.relics || []).length;
-      const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
-      const prompt = collectedRelics === totalRelics ? 'Press E' : `${collectedRelics}/${totalRelics} relics`;
+      const prompt = getUnlockHint(level);
       ctx.save();
-      ctx.fillStyle = 'rgba(12, 17, 29, 0.72)';
-      ctx.fillRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
-      ctx.strokeStyle = '#ffe790';
-      ctx.strokeRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
-      ctx.fillStyle = '#ffe790';
       ctx.font = '14px sans-serif';
-      ctx.fillText(prompt, level.lever.x - 28, level.lever.y - 17);
+      const promptWidth = ctx.measureText(prompt).width + 20;
+      const promptX = Math.max(8, Math.min(world.width - promptWidth - 8, level.lever.x - promptWidth / 2));
+      ctx.fillStyle = 'rgba(12, 17, 29, 0.72)';
+      ctx.fillRect(promptX, level.lever.y - 34, promptWidth, 24);
+      ctx.strokeStyle = '#ffe790';
+      ctx.strokeRect(promptX, level.lever.y - 34, promptWidth, 24);
+      ctx.fillStyle = '#ffe790';
+      ctx.fillText(prompt, promptX + 10, level.lever.y - 17);
       ctx.restore();
     }
   }
@@ -1011,6 +1242,7 @@ function draw() {
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
   drawBouncePads(level.bouncePads);
+  drawDashOrbs(level.dashOrbs);
   drawRelics(level.relics);
   drawLever(level.lever);
   drawGate(level.gate);
