@@ -2,14 +2,39 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 
-const WIDTH = canvas.width;
-const HEIGHT = canvas.height;
+const world = {
+  gravity: 1800,
+  width: canvas.width,
+  height: canvas.height,
+};
+
+const material = {
+  platformPattern: null,
+};
+
+function buildMaterials() {
+  const tile = document.createElement('canvas');
+  tile.width = 24;
+  tile.height = 24;
+  const tctx = tile.getContext('2d');
+  tctx.fillStyle = '#7f8aa4';
+  tctx.fillRect(0, 0, tile.width, tile.height);
+  tctx.fillStyle = '#96a2c1';
+  tctx.fillRect(0, 0, tile.width, 5);
+  tctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  tctx.lineWidth = 2;
+  tctx.beginPath();
+  tctx.moveTo(0, 12);
+  tctx.lineTo(24, 12);
+  tctx.stroke();
+  material.platformPattern = ctx.createPattern(tile, 'repeat');
+}
 
 const keysHeld = new Set();
 const keysPressed = new Set();
 window.addEventListener('keydown', (e) => {
   const code = e.code;
-  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "KeyW", "KeyA", "KeyS", "KeyD", "Space", "KeyE", "KeyR"].includes(code)) {
+  if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE"].includes(code)) {
     e.preventDefault();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
@@ -17,339 +42,598 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keysHeld.delete(e.code));
 
-const rooms = {
-  start: { id: 'start', x: 40, y: 40, w: 220, h: 180, doors: [{ x: 250, y: 110, to: 'hub', spawn: { x: 290, y: 130 } }] },
-  hub: { id: 'hub', x: 280, y: 40, w: 360, h: 420, doors: [
-    { x: 280, y: 110, to: 'start', spawn: { x: 235, y: 130 } },
-    { x: 630, y: 100, to: 'clue', spawn: { x: 665, y: 120 } },
-    { x: 630, y: 220, to: 'trap', spawn: { x: 665, y: 240 } },
-    { x: 630, y: 340, to: 'key', spawn: { x: 665, y: 360 } },
-  ] },
-  clue: { id: 'clue', x: 660, y: 40, w: 240, h: 180, doors: [{ x: 660, y: 110, to: 'hub', spawn: { x: 615, y: 120 } }] },
-  trap: { id: 'trap', x: 660, y: 220, w: 240, h: 180, doors: [{ x: 660, y: 300, to: 'hub', spawn: { x: 615, y: 240 } }] },
-  key: { id: 'key', x: 660, y: 340, w: 240, h: 160, doors: [{ x: 660, y: 420, to: 'hub', spawn: { x: 615, y: 360 } }] },
-  seal: { id: 'seal', x: 280, y: 470, w: 360, h: 60, doors: [{ x: 630, y: 490, to: 'final', spawn: { x: 675, y: 500 }, locked: true }] },
-  final: { id: 'final', x: 660, y: 470, w: 240, h: 60, doors: [] },
-};
-
-rooms.hub.doors.push({ x: 430, y: 450, to: 'seal', spawn: { x: 450, y: 495 } });
-rooms.seal.doors.push({ x: 280, y: 490, to: 'hub', spawn: { x: 450, y: 430 } });
-
-const state = {
-  room: 'start',
-  hp: 100,
-  maxHp: 100,
-  hasPotion: false,
-  hasSigil: false,
-  clueRead: false,
-  sealOpened: false,
-  bossSpawned: false,
-  bossPrimed: false,
+const player = {
+  x: 40,
+  y: 420,
+  w: 30,
+  h: 42,
+  vx: 0,
+  vy: 0,
+  speed: 280,
+  jumpForce: 730,
+  onGround: false,
   won: false,
-  lose: false,
-  msg: 'Find the correct sigil to unseal the door.',
-  enemies: [
-    { room: 'trap', x: 760, y: 290, r: 12, hp: 35, speed: 70, state: 'patrol', patrolA: 730, patrolB: 840, dir: 1, detect: 120 },
-  ],
-  boss: { room: 'final', x: 810, y: 500, r: 18, hp: 90, alive: true, cooldown: 0, windup: 0 },
-  traps: [
-    { room: 'trap', x: 720, y: 260, w: 120, h: 16, phase: 0 },
-  ],
-  items: {
-    potion: { room: 'clue', x: 760, y: 150, taken: false },
-    sigil: { room: 'key', x: 785, y: 410, taken: false },
-    clue: { room: 'clue', x: 825, y: 95, used: false },
-  },
+  facing: 1,
 };
 
-const player = { x: 120, y: 130, r: 10, speed: 160, attackCd: 0, iFrames: 0 };
+const levels = [
+  {
+    name: 'Level 1: Entry Hall',
+    start: { x: 40, y: 420 },
+    platforms: [
+      { x: 0, y: 500, w: 240, h: 40 },
+      { x: 320, y: 500, w: 180, h: 40 },
+      { x: 550, y: 440, w: 160, h: 20 },
+      { x: 760, y: 380, w: 120, h: 20 },
+      { x: 900, y: 320, w: 60, h: 20 },
+    ],
+    spikes: [{ x: 258, y: 500, w: 40, h: 40 }],
+    movingPlatforms: [
+      { x: 470, y: 420, w: 90, h: 16, axis: 'x', origin: 470, range: 70, speed: 1.2, phase: 0.2 },
+    ],
+    bouncePads: [{ x: 860, y: 302, w: 38, h: 18, force: 900 }],
+    crumblePlatforms: [],
+    relics: [
+      { x: 355, y: 470, w: 14, h: 14, collected: false },
+      { x: 780, y: 350, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 185, y: 460, w: 18, h: 40, pulled: false, promptRange: 80 },
+    gate: { x: 915, y: 265, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemy: {
+      spawnX: 575,
+      y: 400,
+      w: 34,
+      h: 34,
+      speed: 72,
+      patrolMinX: 555,
+      patrolMaxX: 690,
+      detectionRange: 130,
+      resetRange: 210,
+    },
+  },
+  {
+    name: 'Level 2: Lever Chamber',
+    start: { x: 30, y: 300 },
+    platforms: [
+      { x: 0, y: 500, w: 230, h: 40 },
+      { x: 265, y: 450, w: 180, h: 20 },
+      { x: 480, y: 410, w: 150, h: 20 },
+      { x: 670, y: 460, w: 180, h: 20 },
+      { x: 820, y: 500, w: 140, h: 40 },
+    ],
+    spikes: [
+      { x: 232, y: 500, w: 30, h: 40 },
+      { x: 635, y: 500, w: 30, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 510, y: 360, w: 86, h: 16, axis: 'x', origin: 510, range: 90, speed: 1.6, phase: 0.6 },
+    ],
+    bouncePads: [{ x: 715, y: 442, w: 38, h: 18, force: 980 }],
+    crumblePlatforms: [
+      { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 505, y: 386, w: 14, h: 14, collected: false },
+      { x: 736, y: 432, w: 14, h: 14, collected: false },
+      { x: 838, y: 472, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 340, y: 410, w: 18, h: 40, pulled: false, promptRange: 66 },
+    gate: { x: 900, y: 445, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemy: {
+      spawnX: 690,
+      y: 426,
+      w: 34,
+      h: 34,
+      speed: 105,
+      patrolMinX: 670,
+      patrolMaxX: 840,
+      detectionRange: 240,
+      resetRange: 300,
+    },
+  },
+];
 
-function setStatus(t) { state.msg = t; statusEl.textContent = t; }
-function isPressed(code) { return keysPressed.has(code); }
-function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-function inRect(p, r) { return p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h; }
-function objectiveText() {
-  if (!state.clueRead) return 'Objective: Read the clue tablet in Exploration Room A.';
-  if (!state.hasSigil) return 'Objective: Find the Azure Sigil in the key room.';
-  if (!state.sealOpened) return 'Objective: Return to the runeseal room and interact.';
-  if (!state.bossPrimed) return 'Objective: Interact with the ritual altar to start miniboss.';
-  if (!state.won) return 'Objective: Defeat the miniboss.';
-  return 'Objective: Escape complete.';
+let currentLevelIndex = 0;
+let enemy = null;
+
+function currentLevel() {
+  return levels[currentLevelIndex];
 }
 
-function changeRoom(id, spawn) {
-  state.room = id;
-  player.x = spawn.x;
-  player.y = spawn.y;
+function setStatus(text) {
+  statusEl.textContent = text;
 }
 
-function hurt(amount, source = 'damage') {
-  if (player.iFrames > 0 || state.won || state.lose) return;
-  player.iFrames = 0.6;
-  state.hp = Math.max(0, state.hp - amount);
-  setStatus(`Took ${amount} ${source}. HP ${state.hp}/${state.maxHp}`);
-  if (state.hp <= 0) {
-    state.lose = true;
-    setStatus('You fell in the dungeon. Press R to restart.');
+function overlap(a, b) {
+  return a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y;
+}
+
+function resetEnemy() {
+  const levelEnemy = currentLevel().enemy;
+  enemy = {
+    x: levelEnemy.spawnX,
+    y: levelEnemy.y,
+    w: levelEnemy.w,
+    h: levelEnemy.h,
+    vx: 0,
+    speed: levelEnemy.speed,
+    patrolMinX: levelEnemy.patrolMinX,
+    patrolMaxX: levelEnemy.patrolMaxX,
+    detectionRange: levelEnemy.detectionRange,
+    resetRange: levelEnemy.resetRange,
+    state: 'patrol',
+    direction: 1,
+  };
+}
+
+function resetPlayer(position, message) {
+  player.x = position.x;
+  player.y = position.y;
+  player.vx = 0;
+  player.vy = 0;
+  player.onGround = false;
+  player.won = false;
+  setStatus(message);
+}
+
+function loadLevel(index, message) {
+  currentLevelIndex = index;
+  const level = currentLevel();
+  level.gate.locked = level.gate.initialLocked;
+  if (level.lever) level.lever.pulled = false;
+  if (level.relics) level.relics.forEach((r) => { r.collected = false; });
+  if (level.crumblePlatforms) {
+    level.crumblePlatforms.forEach((p) => {
+      p.state = 'solid';
+      p.timer = 0;
+    });
   }
+  resetEnemy();
+  resetPlayer(level.start, message || `${level.name}. Reach the gate.`);
 }
 
-function restartGame() {
-  state.room = 'start';
-  state.hp = 100;
-  state.hasPotion = false;
-  state.hasSigil = false;
-  state.clueRead = false;
-  state.sealOpened = false;
-  state.bossSpawned = false;
-  state.bossPrimed = false;
-  state.won = false;
-  state.lose = false;
-  state.items.potion.taken = false;
-  state.items.sigil.taken = false;
-  state.items.clue.used = false;
-  state.enemies[0].x = 760;
-  state.enemies[0].hp = 35;
-  state.enemies[0].state = 'patrol';
-  state.boss.hp = 90;
-  state.boss.alive = true;
-  player.x = 120;
-  player.y = 130;
-  setStatus('Find the correct sigil to unseal the door.');
+function restartLevel(message = 'Level reset.') {
+  const level = currentLevel();
+  level.gate.locked = level.gate.initialLocked;
+  if (level.lever) level.lever.pulled = false;
+  if (level.relics) level.relics.forEach((r) => { r.collected = false; });
+  if (level.crumblePlatforms) {
+    level.crumblePlatforms.forEach((p) => {
+      p.state = 'solid';
+      p.timer = 0;
+    });
+  }
+  resetEnemy();
+  resetPlayer(level.start, `${message} ${level.name}`);
 }
 
-function update(dt) {
-  if (isPressed('KeyR')) restartGame();
-  if (state.won || state.lose) return;
+function isPressed(code) {
+  return keysPressed.has(code);
+}
 
-  player.attackCd = Math.max(0, player.attackCd - dt);
-  player.iFrames = Math.max(0, player.iFrames - dt);
+function updateDynamicFeatures(level, dt, nowMs) {
+  if (level.movingPlatforms) {
+    for (const mp of level.movingPlatforms) {
+      const offset = Math.sin(nowMs / 1000 * mp.speed + mp.phase) * mp.range;
+      if (mp.axis === 'x') mp.x = mp.origin + offset;
+    }
+  }
 
-  let dx = 0, dy = 0;
-  if (keysHeld.has('ArrowLeft') || keysHeld.has('KeyA')) dx -= 1;
-  if (keysHeld.has('ArrowRight') || keysHeld.has('KeyD')) dx += 1;
-  if (keysHeld.has('ArrowUp') || keysHeld.has('KeyW')) dy -= 1;
-  if (keysHeld.has('ArrowDown') || keysHeld.has('KeyS')) dy += 1;
-  const mag = Math.hypot(dx, dy) || 1;
-  player.x += (dx / mag) * player.speed * dt;
-  player.y += (dy / mag) * player.speed * dt;
-
-  const room = rooms[state.room];
-  player.x = Math.max(room.x + 8, Math.min(room.x + room.w - 8, player.x));
-  player.y = Math.max(room.y + 8, Math.min(room.y + room.h - 8, player.y));
-
-  for (const d of room.doors) {
-    const doorBox = { x: d.x - 10, y: d.y - 22, w: 20, h: 44 };
-    if (inRect(player, doorBox) && isPressed('KeyE')) {
-      if (d.locked && !state.sealOpened) {
-        setStatus('A magical seal blocks this door.');
-      } else {
-        changeRoom(d.to, d.spawn);
-        if (d.to === 'final' && !state.bossSpawned) {
-          state.bossSpawned = true;
-          setStatus('Final room reached. Interact with altar when ready.');
+  if (level.crumblePlatforms) {
+    for (const cp of level.crumblePlatforms) {
+      if (cp.state === 'breaking') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'gone';
+          cp.timer = 2.2;
+        }
+      } else if (cp.state === 'gone') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'solid';
+          cp.timer = 0;
         }
       }
     }
   }
+}
 
-  if (state.room === 'seal' && isPressed('KeyE')) {
-    if (state.hasSigil) {
-      state.sealOpened = true;
-      rooms.seal.doors[0].locked = false;
-      setStatus('Runeseal broken. The final room is open.');
+function getSolidPlatforms(level) {
+  const staticPlatforms = level.platforms || [];
+  const movingPlatforms = level.movingPlatforms || [];
+  const crumblePlatforms = (level.crumblePlatforms || []).filter((p) => p.state !== 'gone');
+  return [...staticPlatforms, ...movingPlatforms, ...crumblePlatforms];
+}
+
+function updatePlayer(dt) {
+  if (isPressed('KeyR')) {
+    loadLevel(currentLevelIndex, 'Manual reset.');
+    return;
+  }
+
+  if (player.won) return;
+
+  const level = currentLevel();
+  const left = keysHeld.has('ArrowLeft') || keysHeld.has('KeyA');
+  const right = keysHeld.has('ArrowRight') || keysHeld.has('KeyD');
+
+  if (left === right) {
+    player.vx = 0;
+  } else {
+    player.vx = left ? -player.speed : player.speed;
+    player.facing = left ? -1 : 1;
+  }
+
+  if (keysHeld.has('Space') && player.onGround) {
+    player.vy = -player.jumpForce;
+    player.onGround = false;
+  }
+
+  player.vy += world.gravity * dt;
+
+  const prevX = player.x;
+  const prevY = player.y;
+
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  player.x = Math.max(0, Math.min(world.width - player.w, player.x));
+  player.onGround = false;
+
+  for (const p of getSolidPlatforms(level)) {
+    if (!overlap(player, p)) continue;
+
+    const cameFromAbove = prevY + player.h <= p.y;
+    const cameFromBelow = prevY >= p.y + p.h;
+
+    if (cameFromAbove) {
+      player.y = p.y - player.h;
+      player.vy = 0;
+      player.onGround = true;
+      if (level.crumblePlatforms && level.crumblePlatforms.includes(p) && p.state === 'solid') {
+        p.state = 'breaking';
+        p.timer = 0.45;
+      }
+    } else if (cameFromBelow) {
+      player.y = p.y + p.h;
+      player.vy = Math.max(0, player.vy);
     } else {
-      setStatus('The seal rejects you. A sigil is required.');
+      player.x = prevX;
     }
   }
 
-  if (state.room === state.items.clue.room && !state.items.clue.used && dist(player, state.items.clue) < 22 && isPressed('KeyE')) {
-    state.items.clue.used = true;
-    state.clueRead = true;
-    setStatus('Clue: “Only the Azure Sigil can break the runeseal.”');
-  }
-  if (state.room === state.items.potion.room && !state.items.potion.taken && dist(player, state.items.potion) < 20 && isPressed('KeyE')) {
-    state.items.potion.taken = true;
-    state.hasPotion = true;
-    setStatus('Potion picked. Press E again while in room to heal 35 HP.');
-  }
-  if (state.hasPotion && isPressed('KeyE') && state.room !== state.items.potion.room) {
-    state.hasPotion = false;
-    state.hp = Math.min(state.maxHp, state.hp + 35);
-    setStatus(`Potion consumed. HP ${state.hp}/${state.maxHp}`);
-  }
-  if (state.room === state.items.sigil.room && !state.items.sigil.taken && dist(player, state.items.sigil) < 20 && isPressed('KeyE')) {
-    state.items.sigil.taken = true;
-    state.hasSigil = true;
-    setStatus('Azure Sigil acquired. Return to the sealed door.');
-  }
-
-  for (const t of state.traps) {
-    if (t.room !== state.room) continue;
-    t.phase += dt * 1.6;
-    const active = Math.sin(t.phase) > 0.4;
-    if (active && inRect(player, t)) hurt(7, 'trap');
-  }
-
-  for (const e of state.enemies) {
-    if (e.hp <= 0 || e.room !== state.room) continue;
-    const d = dist(player, e);
-    if (e.state === 'patrol' && d < e.detect) e.state = 'alert';
-    if (e.state === 'alert' && d > e.detect * 1.5) e.state = 'reset';
-    if (e.state === 'reset' && Math.abs(e.x - e.patrolA) < 6) e.state = 'patrol';
-
-    if (e.state === 'patrol') {
-      e.x += e.dir * e.speed * dt;
-      if (e.x < e.patrolA || e.x > e.patrolB) e.dir *= -1;
-    } else if (e.state === 'alert') {
-      const vx = (player.x - e.x) / (d || 1);
-      const vy = (player.y - e.y) / (d || 1);
-      e.x += vx * e.speed * 1.15 * dt;
-      e.y += vy * e.speed * 1.15 * dt;
-    } else {
-      e.x += (e.patrolA - e.x) * 0.03;
+  for (const s of level.spikes) {
+    if (overlap(player, s)) {
+      restartLevel('Hit spikes!');
+      return;
     }
-
-    if (dist(player, e) < player.r + e.r) hurt(6, 'enemy');
   }
 
-  if (state.room === state.boss.room && !state.bossPrimed && isPressed('KeyE')) {
-    state.bossPrimed = true;
-    setStatus('Ritual started. Miniboss awakens!');
+  if (enemy && overlap(player, enemy)) {
+    restartLevel('Enemy got you!');
+    return;
   }
 
-  if (state.room === state.boss.room && state.boss.alive && state.bossPrimed) {
-    const b = state.boss;
-    b.cooldown -= dt;
-    if (b.cooldown <= 0) {
-      b.windup = 0.6;
-      b.cooldown = 2.1;
-    }
-    if (b.windup > 0) {
-      b.windup -= dt;
-      if (b.windup <= 0 && dist(player, b) < 95) hurt(14, 'miniboss slam');
-    }
-    const bd = dist(player, b);
-    const vx = (player.x - b.x) / (bd || 1);
-    const vy = (player.y - b.y) / (bd || 1);
-    b.x += vx * 52 * dt;
-    b.y += vy * 52 * dt;
-  }
-
-  if (isPressed('Space') && player.attackCd <= 0) {
-    player.attackCd = 0.35;
-    for (const e of state.enemies) {
-      if (e.hp > 0 && e.room === state.room && dist(player, e) < 42) {
-        e.hp -= 20;
-        setStatus('Enemy hit.');
+  if (level.bouncePads) {
+    for (const pad of level.bouncePads) {
+      if (overlap(player, pad) && player.vy >= -120) {
+        player.vy = -pad.force;
+        player.onGround = false;
       }
     }
-    if (state.room === state.boss.room && state.boss.alive && state.bossPrimed && dist(player, state.boss) < 46) {
-      state.boss.hp -= 12;
-      setStatus(`Miniboss hit (${Math.max(0, state.boss.hp)} HP).`);
-      if (state.boss.hp <= 0) {
-        state.boss.alive = false;
-        state.won = true;
-        setStatus('Victory! You conquered Runeseal Descent.');
+  }
+
+  if (player.y > world.height + 80) {
+    restartLevel('You fell!');
+    return;
+  }
+
+  if (level.lever) {
+    const leverZone = {
+      x: level.lever.x - level.lever.promptRange,
+      y: level.lever.y - 20,
+      w: level.lever.w + level.lever.promptRange * 2,
+      h: level.lever.h + 40,
+    };
+
+    if (overlap(player, leverZone) && !level.lever.pulled && isPressed('KeyE')) {
+      const totalRelics = level.relics ? level.relics.length : 0;
+      const collectedRelics = level.relics ? level.relics.filter((r) => r.collected).length : 0;
+      if (collectedRelics < totalRelics) {
+        setStatus(`Need more relics (${collectedRelics}/${totalRelics}) before pulling joystick.`);
+      } else {
+        level.lever.pulled = true;
+        level.gate.locked = false;
+        setStatus('Joystick pulled! Gate unlocked.');
       }
+    }
+  }
+
+  if (level.relics) {
+    for (const relic of level.relics) {
+      if (!relic.collected && overlap(player, relic)) {
+        relic.collected = true;
+        const total = level.relics.length;
+        const got = level.relics.filter((r) => r.collected).length;
+        setStatus(`Relic collected (${got}/${total}).`);
+      }
+    }
+  }
+
+  if (overlap(player, level.gate)) {
+    if (level.gate.locked) {
+      setStatus('Gate locked. Pull the joystick lever with E.');
+      player.x = prevX;
+      return;
+    }
+
+    if (level.gate.type === 'next') {
+      loadLevel(currentLevelIndex + 1, 'Level complete! Welcome to Level 2. Pull the lever to unlock the gate.');
+      return;
+    }
+
+    if (level.gate.type === 'finish') {
+      player.won = true;
+      setStatus('You cleared both levels! Press R to replay from this level.');
     }
   }
 }
 
-function drawRoom(r) {
-  ctx.fillStyle = '#1f2a33';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#4f6a78';
+function updateEnemy(dt) {
+  if (!enemy || player.won) return;
+
+  const playerCenterX = player.x + player.w / 2;
+  const enemyCenterX = enemy.x + enemy.w / 2;
+  const dist = Math.abs(playerCenterX - enemyCenterX);
+
+  if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
+    enemy.state = 'alert';
+  } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
+    enemy.state = 'reset';
+  } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
+    enemy.state = 'patrol';
+    enemy.direction = 1;
+  }
+
+  if (enemy.state === 'patrol') {
+    enemy.vx = enemy.speed * enemy.direction;
+    enemy.x += enemy.vx * dt;
+
+    if (enemy.x <= enemy.patrolMinX) {
+      enemy.x = enemy.patrolMinX;
+      enemy.direction = 1;
+    } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
+      enemy.x = enemy.patrolMaxX - enemy.w;
+      enemy.direction = -1;
+    }
+  } else if (enemy.state === 'alert') {
+    enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.55 : enemy.speed * 1.55;
+    enemy.x += enemy.vx * dt;
+    enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
+  } else if (enemy.state === 'reset') {
+    enemy.vx = -enemy.speed;
+    enemy.x += enemy.vx * dt;
+    if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+  }
+}
+
+function drawPlatforms(platforms) {
+  for (const p of platforms) {
+    ctx.fillStyle = material.platformPattern || '#8a96b3';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    ctx.fillStyle = '#b8c2dc';
+    ctx.fillRect(p.x, p.y, p.w, 6);
+  }
+}
+
+function drawSpikes(spikes) {
+  for (const s of spikes) {
+    ctx.fillStyle = '#d94a4a';
+    const triangleCount = Math.max(3, Math.floor(s.w / 12));
+    const triangleW = s.w / triangleCount;
+    for (let i = 0; i < triangleCount; i++) {
+      const x = s.x + i * triangleW;
+      ctx.beginPath();
+      ctx.moveTo(x, s.y + s.h);
+      ctx.lineTo(x + triangleW / 2, s.y);
+      ctx.lineTo(x + triangleW, s.y + s.h);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
+function drawBouncePads(bouncePads) {
+  for (const pad of bouncePads || []) {
+    const grad = ctx.createLinearGradient(pad.x, pad.y, pad.x, pad.y + pad.h);
+    grad.addColorStop(0, '#9cff93');
+    grad.addColorStop(1, '#2fba67');
+    ctx.fillStyle = grad;
+    ctx.fillRect(pad.x, pad.y, pad.w, pad.h);
+    ctx.fillStyle = '#173d2a';
+    ctx.fillRect(pad.x + 3, pad.y + 3, pad.w - 6, 4);
+  }
+}
+
+function drawRelics(relics) {
+  for (const relic of relics || []) {
+    if (relic.collected) continue;
+    const pulse = 1 + Math.sin(performance.now() / 140) * 0.08;
+    const size = relic.w * pulse;
+    const ox = relic.x + relic.w / 2 - size / 2;
+    const oy = relic.y + relic.h / 2 - size / 2;
+    ctx.fillStyle = '#ffd66b';
+    ctx.fillRect(ox, oy, size, size);
+    ctx.fillStyle = '#fff3c8';
+    ctx.fillRect(ox + 3, oy + 3, size - 6, size - 6);
+  }
+}
+
+function drawGate(gate) {
+  const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
+  gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
+  gateGradient.addColorStop(1, gate.locked ? '#5b4f40' : '#2e9d62');
+  ctx.fillStyle = gateGradient;
+  ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
+  ctx.fillStyle = '#2f2f2f';
+  ctx.fillRect(gate.x + 5, gate.y + 8, gate.w - 10, gate.h - 16);
+
+  if (gate.locked) {
+    ctx.fillStyle = '#f2cf5b';
+    ctx.fillRect(gate.x + 10, gate.y + 20, 10, 12);
+    ctx.strokeStyle = '#f2cf5b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(gate.x + 15, gate.y + 20, 5, Math.PI, 2 * Math.PI);
+    ctx.stroke();
+  }
+}
+
+function drawLever(lever) {
+  if (!lever) return;
+  ctx.fillStyle = '#6a7288';
+  ctx.fillRect(lever.x + 7, lever.y + 12, 4, 28);
+  const leverGradient = ctx.createLinearGradient(lever.x, lever.y, lever.x, lever.y + lever.h);
+  leverGradient.addColorStop(0, '#c5d2ff');
+  leverGradient.addColorStop(1, '#7f8fb7');
+  ctx.fillStyle = leverGradient;
+
+  ctx.save();
+  ctx.translate(lever.x + 9, lever.y + 14);
+  ctx.rotate(lever.pulled ? 0.65 : -0.65);
+  ctx.fillRect(-2, -18, 4, 20);
+  ctx.beginPath();
+  ctx.arc(0, -18, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPlayer() {
+  const bob = Math.sin(performance.now() / 100) * 1.1;
+  const px = player.x;
+  const py = player.y + bob;
+  const armor = ctx.createLinearGradient(px, py, px, py + player.h);
+  armor.addColorStop(0, '#83ecff');
+  armor.addColorStop(1, '#2d87bf');
+
+  // body
+  ctx.fillStyle = armor;
+  ctx.fillRect(px, py + 10, player.w, player.h - 10);
+  // head
+  ctx.fillStyle = '#d8fbff';
+  ctx.fillRect(px + 4, py, player.w - 8, 14);
+  // visor/eyes
+  ctx.fillStyle = '#10344a';
+  const eyeX = player.facing > 0 ? px + player.w - 14 : px + 6;
+  ctx.fillRect(eyeX, py + 4, 8, 4);
+  // scarf accent
+  ctx.fillStyle = '#ff8a5b';
+  ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
+  // outline
+  ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-  for (const d of r.doors) {
-    ctx.fillStyle = (d.locked && !state.sealOpened) ? '#7a4d52' : '#6dc091';
-    ctx.fillRect(d.x - 8, d.y - 20, 16, 40);
+  ctx.strokeRect(px, py, player.w, player.h);
+}
+
+function drawEnemy() {
+  if (!enemy) return;
+
+  const colors = {
+    patrol: '#f2bd43',
+    alert: '#ff6b6b',
+    reset: '#89b6ff',
+  };
+
+  // slime body
+  const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
+  const gradient = ctx.createRadialGradient(
+    enemy.x + enemy.w / 2,
+    enemy.y + enemy.h / 2,
+    4,
+    enemy.x + enemy.w / 2,
+    enemy.y + enemy.h / 2,
+    enemy.w / 2
+  );
+  gradient.addColorStop(0, '#fff8');
+  gradient.addColorStop(1, colors[enemy.state]);
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // eyes
+  ctx.fillStyle = '#1b1f2e';
+  ctx.beginPath();
+  ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
+  ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // alert spikes
+  if (enemy.state === 'alert') {
+    ctx.fillStyle = '#ffd2d2';
+    ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
+    ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+  }
+}
+
+function drawUI(level) {
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(level.name, 16, 24);
+  ctx.fillText(`Enemy state: ${enemy.state.toUpperCase()}`, 16, 46);
+  const totalRelics = (level.relics || []).length;
+  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+  ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
+  ctx.fillText('Controls: A/D or ←/→ move, Space jump, E interact, R reset', 16, 90);
+
+  if (level.lever && !level.lever.pulled) {
+    const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
+    if (nearLever) {
+      ctx.fillStyle = '#ffe790';
+      ctx.fillText('Press E to pull joystick (all relics required)', level.lever.x - 84, level.lever.y - 10);
+    }
   }
 }
 
 function draw() {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
-  ctx.fillStyle = '#0f1419';
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  const level = currentLevel();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // map preview (route choice)
-  for (const id of ['start', 'hub', 'clue', 'trap', 'key', 'seal', 'final']) drawRoom(rooms[id]);
-
-  // traps
-  for (const t of state.traps) {
-    const active = Math.sin(t.phase) > 0.25;
-    ctx.fillStyle = active ? '#d24d4d' : '#5e2d2d';
-    ctx.fillRect(t.x, t.y, t.w, t.h);
+  ctx.fillStyle = '#20263a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#1a1f30';
+  for (let i = 0; i < 12; i++) {
+    ctx.fillRect(i * 90, 0, 45, canvas.height);
   }
 
-  // clue / items
-  if (!state.items.clue.used) {
-    ctx.fillStyle = '#6bc0ff';
-    ctx.fillRect(state.items.clue.x - 8, state.items.clue.y - 8, 16, 16);
-  }
-  if (!state.items.potion.taken) {
-    ctx.fillStyle = '#9bff7b';
-    ctx.beginPath(); ctx.arc(state.items.potion.x, state.items.potion.y, 8, 0, Math.PI * 2); ctx.fill();
-  }
-  if (!state.items.sigil.taken) {
-    ctx.fillStyle = '#58d7ff';
-    ctx.beginPath(); ctx.moveTo(state.items.sigil.x, state.items.sigil.y - 10); ctx.lineTo(state.items.sigil.x + 10, state.items.sigil.y); ctx.lineTo(state.items.sigil.x, state.items.sigil.y + 10); ctx.lineTo(state.items.sigil.x - 10, state.items.sigil.y); ctx.closePath(); ctx.fill();
-  }
-
-  // enemies (humanoid cultist style)
-  for (const e of state.enemies) {
-    if (e.hp <= 0) continue;
-    const color = e.state === 'alert' ? '#ff6b6b' : e.state === 'reset' ? '#89b6ff' : '#f2bd43';
-    ctx.fillStyle = color;
-    ctx.fillRect(e.x - 8, e.y - 8, 16, 20); // body
-    ctx.fillStyle = '#f7d7b4';
-    ctx.beginPath(); ctx.arc(e.x, e.y - 12, 6, 0, Math.PI * 2); ctx.fill(); // head
-    ctx.fillStyle = '#2a1c1c';
-    ctx.fillRect(e.x - 6, e.y + 12, 4, 8);
-    ctx.fillRect(e.x + 2, e.y + 12, 4, 8);
-  }
-
-  if (state.boss.alive && state.bossPrimed) {
-    ctx.fillStyle = state.boss.windup > 0 ? '#ff3f7e' : '#8f61ff';
-    ctx.fillRect(state.boss.x - 14, state.boss.y - 12, 28, 34);
-    ctx.fillStyle = '#d9ccff';
-    ctx.beginPath(); ctx.arc(state.boss.x, state.boss.y - 16, 8, 0, Math.PI * 2); ctx.fill();
-  } else if (state.room === 'final' && !state.bossPrimed) {
-    ctx.fillStyle = '#5dd7ff';
-    ctx.fillRect(748, 494, 24, 12);
-    ctx.fillStyle = '#c8f4ff';
-    ctx.fillText('Press E at altar', 740, 488);
-  }
-
-  // player (more human-like)
-  ctx.fillStyle = player.iFrames > 0 ? '#ffe9a1' : '#9ae6ff';
-  ctx.fillRect(player.x - 7, player.y - 6, 14, 18);
-  ctx.fillStyle = '#ffe2c2';
-  ctx.beginPath(); ctx.arc(player.x, player.y - 10, 6, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#24536f';
-  ctx.fillRect(player.x - 6, player.y + 12, 4, 7);
-  ctx.fillRect(player.x + 2, player.y + 12, 4, 7);
-
-  // HUD
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '15px sans-serif';
-  ctx.fillText(`Room: ${state.room.toUpperCase()}  HP: ${state.hp}/${state.maxHp}`, 14, 22);
-  ctx.fillText(`Sigil: ${state.hasSigil ? 'YES' : 'NO'}  Potion: ${state.hasPotion ? 'YES' : 'NO'}  Clue: ${state.clueRead ? 'READ' : 'UNREAD'}`, 14, 42);
-  ctx.fillText('Controls: Move WASD/Arrows | E interact/use potion | Space attack | R restart', 14, 62);
-  ctx.fillStyle = '#ffe9a1';
-  ctx.fillText(objectiveText(), 14, 82);
+  drawPlatforms(getSolidPlatforms(level));
+  drawSpikes(level.spikes);
+  drawBouncePads(level.bouncePads);
+  drawRelics(level.relics);
+  drawLever(level.lever);
+  drawGate(level.gate);
+  drawEnemy();
+  drawPlayer();
+  drawUI(level);
 }
 
-let last = performance.now();
+let lastTime = performance.now();
 function loop(now) {
-  const dt = Math.min(0.033, (now - last) / 1000);
-  last = now;
-  update(dt);
+  const dt = Math.min((now - lastTime) / 1000, 1 / 30);
+  lastTime = now;
+
+  updateDynamicFeatures(currentLevel(), dt, now);
+  updatePlayer(dt);
+  updateEnemy(dt);
   draw();
+
   keysPressed.clear();
   requestAnimationFrame(loop);
 }
 
-setStatus('Find the correct sigil to unseal the door.');
+buildMaterials();
+loadLevel(0, 'Level 1 started. Pull the joystick to open the first gate.');
 requestAnimationFrame(loop);
