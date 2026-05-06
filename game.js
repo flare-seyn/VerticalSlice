@@ -10,6 +10,8 @@ const world = {
 
 const material = {
   platformPattern: null,
+  wallPattern: null,
+  trimPattern: null,
 };
 
 function buildMaterials() {
@@ -28,6 +30,107 @@ function buildMaterials() {
   tctx.lineTo(24, 12);
   tctx.stroke();
   material.platformPattern = ctx.createPattern(tile, 'repeat');
+
+  const wall = document.createElement('canvas');
+  wall.width = 32;
+  wall.height = 32;
+  const wctx = wall.getContext('2d');
+  wctx.fillStyle = '#182033';
+  wctx.fillRect(0, 0, wall.width, wall.height);
+  wctx.fillStyle = '#202a44';
+  wctx.fillRect(1, 1, 30, 30);
+  wctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+  wctx.strokeRect(6, 6, 20, 20);
+  material.wallPattern = ctx.createPattern(wall, 'repeat');
+
+  const trim = document.createElement('canvas');
+  trim.width = 16;
+  trim.height = 16;
+  const rctx = trim.getContext('2d');
+  rctx.fillStyle = '#293554';
+  rctx.fillRect(0, 0, trim.width, trim.height);
+  rctx.fillStyle = '#8ff7ff';
+  rctx.globalAlpha = 0.22;
+  rctx.fillRect(0, 0, 16, 3);
+  rctx.fillRect(0, 13, 16, 3);
+  material.trimPattern = ctx.createPattern(trim, 'repeat');
+}
+
+
+let audioContext = null;
+const particles = [];
+
+function initAudio() {
+  if (audioContext) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  audioContext = new AudioCtor();
+  if (audioContext.state === 'suspended') audioContext.resume();
+}
+
+function playSound(type) {
+  if (!audioContext) return;
+  const soundMap = {
+    jump: { frequency: 420, end: 660, duration: 0.09, gain: 0.035, wave: 'triangle' },
+    dash: { frequency: 180, end: 80, duration: 0.12, gain: 0.045, wave: 'sawtooth' },
+    collect: { frequency: 640, end: 980, duration: 0.16, gain: 0.035, wave: 'sine' },
+    unlock: { frequency: 360, end: 760, duration: 0.22, gain: 0.05, wave: 'triangle' },
+    bounce: { frequency: 260, end: 520, duration: 0.13, gain: 0.04, wave: 'square' },
+    hazard: { frequency: 170, end: 70, duration: 0.18, gain: 0.05, wave: 'sawtooth' },
+    alert: { frequency: 520, end: 300, duration: 0.11, gain: 0.025, wave: 'square' },
+  };
+  const config = soundMap[type];
+  if (!config) return;
+  const now = audioContext.currentTime;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = config.wave;
+  osc.frequency.setValueAtTime(config.frequency, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, config.end), now + config.duration);
+  gain.gain.setValueAtTime(config.gain, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + config.duration);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start(now);
+  osc.stop(now + config.duration);
+}
+
+function spawnParticles(x, y, count, color, options = {}) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.7;
+    const speed = (options.speed || 80) * (0.45 + Math.random());
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed + (options.vx || 0),
+      vy: Math.sin(angle) * speed + (options.vy || 0),
+      life: options.life || 0.45,
+      maxLife: options.life || 0.45,
+      size: options.size || 4,
+      color,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const particle = particles[i];
+    particle.life -= dt;
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += 220 * dt;
+    if (particle.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const particle of particles) {
+    const alpha = Math.max(0, particle.life / particle.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(particle.x, particle.y, particle.size * alpha, particle.size * alpha);
+  }
+  ctx.globalAlpha = 1;
 }
 
 const keysHeld = new Set();
@@ -36,6 +139,7 @@ window.addEventListener('keydown', (e) => {
   const code = e.code;
   if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE", "ShiftLeft", "ShiftRight"].includes(code)) {
     e.preventDefault();
+    initAudio();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
   keysHeld.add(code);
@@ -59,12 +163,22 @@ const player = {
   dashTimer: 0,
   coyoteTimer: 0,
   jumpBufferTimer: 0,
+  animTime: 0,
+  animationState: 'idle',
 };
 
 const levels = [
   {
     name: 'Level 1: Entry Hall',
     start: { x: 40, y: 420 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 96, type: 'wall' },
+      { x: 64, y: 132, w: 160, h: 32, type: 'trim' },
+      { x: 382, y: 108, w: 128, h: 32, type: 'trim' },
+      { x: 668, y: 130, w: 192, h: 32, type: 'wall' },
+      { x: 120, y: 448, w: 64, h: 32, type: 'crystal' },
+      { x: 590, y: 392, w: 64, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 240, h: 40 },
       { x: 320, y: 500, w: 180, h: 40 },
@@ -101,6 +215,14 @@ const levels = [
   {
     name: 'Level 2: Lever Chamber',
     start: { x: 30, y: 300 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
+      { x: 32, y: 146, w: 128, h: 32, type: 'trim' },
+      { x: 332, y: 118, w: 224, h: 32, type: 'wall' },
+      { x: 690, y: 140, w: 192, h: 32, type: 'trim' },
+      { x: 292, y: 402, w: 96, h: 32, type: 'crystal' },
+      { x: 742, y: 412, w: 80, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 230, h: 40 },
       { x: 265, y: 450, w: 180, h: 20 },
@@ -187,6 +309,8 @@ function resetEnemy() {
     state: 'patrol',
     direction: 1,
     defeated: false,
+    animTime: 0,
+    lastState: 'patrol',
   }));
 }
 
@@ -197,11 +321,17 @@ function resetPlayer(position, message) {
   player.vy = 0;
   player.onGround = false;
   player.won = false;
+  player.dashTimer = 0;
+  player.dashCooldown = 0;
+  player.dashCharge = 1;
+  player.animTime = 0;
+  player.animationState = 'idle';
   setStatus(message);
 }
 
 function loadLevel(index, message) {
   currentLevelIndex = index;
+  particles.length = 0;
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
   if (level.lever) level.lever.pulled = false;
@@ -263,6 +393,7 @@ function updateDynamicFeatures(level, dt, nowMs) {
 }
 
 function updatePlayerAdvancedMovement(dt) {
+  player.animTime += dt;
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
@@ -314,7 +445,13 @@ function updatePlayer(dt) {
     player.onGround = false;
     player.coyoteTimer = 0;
     player.jumpBufferTimer = 0;
+    playSound('jump');
+    spawnParticles(player.x + player.w / 2, player.y + player.h, 8, '#8ff7ff', { speed: 55, life: 0.28, size: 3 });
   }
+
+  player.animationState = player.onGround
+    ? (Math.abs(player.vx) > 10 ? 'run' : 'idle')
+    : (player.vy < 0 ? 'jump' : 'fall');
 
   if (dash && player.onGround && player.dashCharge > 0 && player.dashCooldown <= 0) {
     const dashDir = left ? -1 : (right ? 1 : player.facing);
@@ -323,6 +460,9 @@ function updatePlayer(dt) {
     player.dashTimer = 0.08;
     player.dashCooldown = 0.65;
     player.dashCharge -= 1;
+    player.animationState = 'dash';
+    playSound('dash');
+    spawnParticles(player.x + player.w / 2 - player.facing * 16, player.y + player.h / 2, 18, '#8ff7ff', { speed: 120, vx: -player.facing * 80, life: 0.34, size: 5 });
     setStatus('Dash!');
   }
 
@@ -362,6 +502,8 @@ function updatePlayer(dt) {
 
   for (const s of level.spikes) {
     if (overlap(player, s)) {
+      playSound('hazard');
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
       restartLevel('Hit spikes!');
       return;
     }
@@ -374,9 +516,13 @@ function updatePlayer(dt) {
     if (stomped) {
       enemy.defeated = true;
       player.vy = -380;
+      playSound('bounce');
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 18, '#ffd66b', { speed: 110, life: 0.45, size: 4 });
       setStatus('Enemy incapacitated!');
       continue;
     }
+    playSound('hazard');
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
     restartLevel('Enemy got you!');
     return;
   }
@@ -386,6 +532,8 @@ function updatePlayer(dt) {
       if (overlap(player, pad) && player.vy >= -120) {
         player.vy = -pad.force;
         player.onGround = false;
+        playSound('bounce');
+        spawnParticles(pad.x + pad.w / 2, pad.y, 16, '#9cff93', { speed: 95, vy: -60, life: 0.36, size: 4 });
       }
     }
   }
@@ -411,6 +559,8 @@ function updatePlayer(dt) {
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
+        playSound('unlock');
+        spawnParticles(level.gate.x + level.gate.w / 2, level.gate.y + level.gate.h / 2, 30, '#65df95', { speed: 135, life: 0.7, size: 5 });
         setStatus('Joystick pulled! Gate unlocked.');
       }
     }
@@ -420,6 +570,8 @@ function updatePlayer(dt) {
     for (const relic of level.relics) {
       if (!relic.collected && overlap(player, relic)) {
         relic.collected = true;
+        playSound('collect');
+        spawnParticles(relic.x + relic.w / 2, relic.y + relic.h / 2, 14, '#ffd66b', { speed: 90, life: 0.42, size: 4 });
         const total = level.relics.length;
         const got = level.relics.filter((r) => r.collected).length;
         setStatus(`Relic collected (${got}/${total}).`);
@@ -452,15 +604,21 @@ function updateEnemy(dt) {
   const playerCenterX = player.x + player.w / 2;
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
+    enemy.animTime += dt;
     const enemyCenterX = enemy.x + enemy.w / 2;
     const dist = Math.abs(playerCenterX - enemyCenterX);
 
     if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
       enemy.state = 'alert';
+      enemy.lastState = 'patrol';
+      playSound('alert');
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + 2, 8, '#ff6b6b', { speed: 70, life: 0.3, size: 3 });
     } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
       enemy.state = 'reset';
+      enemy.lastState = 'alert';
     } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
       enemy.state = 'patrol';
+      enemy.lastState = 'reset';
       enemy.direction = 1;
     }
 
@@ -485,6 +643,51 @@ function updateEnemy(dt) {
       if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
     }
   }
+}
+
+
+function drawDecorTilemap(level) {
+  for (const tile of level.decorTiles || []) {
+    if (tile.type === 'wall') {
+      ctx.fillStyle = material.wallPattern || '#202a44';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      ctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+      ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'trim') {
+      ctx.fillStyle = material.trimPattern || '#293554';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'crystal') {
+      const crystalCount = Math.max(3, Math.floor(tile.w / 20));
+      for (let i = 0; i < crystalCount; i++) {
+        const x = tile.x + i * 18 + 4;
+        const h = 12 + (i % 3) * 7;
+        const y = tile.y + tile.h - h;
+        const grad = ctx.createLinearGradient(x, y, x, y + h);
+        grad.addColorStop(0, '#c6fbff');
+        grad.addColorStop(1, '#3fa3c6');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x + 6, y);
+        ctx.lineTo(x + 12, y + h);
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function drawAmbientVfx(nowMs) {
+  const time = nowMs / 1000;
+  ctx.save();
+  for (let i = 0; i < 28; i++) {
+    const x = (i * 73 + Math.sin(time * 0.6 + i) * 18) % world.width;
+    const y = 70 + ((i * 43 + time * 18) % 360);
+    const alpha = 0.12 + Math.sin(time * 1.7 + i) * 0.05;
+    ctx.fillStyle = `rgba(143, 247, 255, ${alpha})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.restore();
 }
 
 function drawPlatforms(platforms) {
@@ -579,40 +782,116 @@ function drawLever(lever) {
 }
 
 function drawPlayer() {
-  const bob = Math.sin(performance.now() / 100) * 1.1;
+  const time = performance.now() / 1000;
+  const state = player.dashTimer > 0 ? 'dash' : player.animationState;
+  const isRunning = state === 'run';
+  const bob = Math.sin(time * (isRunning ? 13 : 4)) * (isRunning ? 2.2 : 0.8);
   const px = player.x;
   const py = player.y + bob;
-  const armor = ctx.createLinearGradient(px, py, px, py + player.h);
-  armor.addColorStop(0, '#83ecff');
-  armor.addColorStop(1, '#2d87bf');
+  const cx = px + player.w / 2;
+  const facing = player.facing;
+  const runCycle = Math.sin(time * 14) * (isRunning ? 1 : 0.18);
+  const armSwing = runCycle * 5;
+  const legSwing = runCycle * 5;
+  const squash = state === 'fall' ? 1.05 : (state === 'jump' ? 0.96 : 1);
 
-  // body
-  ctx.fillStyle = armor;
-  ctx.fillRect(px, py + 10, player.w, player.h - 10);
-  // head
-  ctx.fillStyle = '#d8fbff';
-  ctx.fillRect(px + 4, py, player.w - 8, 14);
-  // visor/eyes
-  ctx.fillStyle = '#10344a';
-  const eyeX = player.facing > 0 ? px + player.w - 14 : px + 6;
-  ctx.fillRect(eyeX, py + 4, 8, 4);
-  // scarf accent
-  ctx.fillStyle = '#ff8a5b';
-  ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
-  // legs animation
-  const walk = Math.sin(performance.now() / 70) * 3 * (Math.abs(player.vx) > 10 ? 1 : 0.2);
-  ctx.fillStyle = '#1e5f85';
-  ctx.fillRect(px + 5, py + player.h - 8 + walk * 0.2, 6, 8);
-  ctx.fillRect(px + player.w - 11, py + player.h - 8 - walk * 0.2, 6, 8);
-  // dash trail
-  if (player.dashTimer > 0) {
-    ctx.fillStyle = 'rgba(130, 245, 255, 0.4)';
-    ctx.fillRect(px - player.facing * 10, py + 8, player.w, player.h - 8);
+  ctx.save();
+  ctx.translate(cx, py + player.h / 2);
+  ctx.scale(facing, squash);
+  ctx.translate(-player.w / 2, -player.h / 2);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.beginPath();
+  ctx.ellipse(player.w / 2, player.h + 4, 18, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (state === 'dash') {
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(130, 245, 255, ${0.24 - i * 0.045})`;
+      ctx.fillRect(-12 - i * 9, 9 + i, player.w - i * 2, player.h - 13 - i * 2);
+    }
   }
-  // outline
+
+  // scarf and backpack sell the character as a more complex model.
+  ctx.strokeStyle = '#ff8a5b';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 17);
+  ctx.quadraticCurveTo(-8, 15 + Math.sin(time * 8) * 3, -18, 24 + Math.cos(time * 5) * 4);
+  ctx.stroke();
+  ctx.fillStyle = '#24455f';
+  ctx.fillRect(2, 16, 7, 18);
+  ctx.fillStyle = '#75e7ff';
+  ctx.fillRect(4, 19, 3, 9);
+
+  // legs with independent feet.
+  ctx.fillStyle = '#1e5f85';
+  ctx.fillRect(8, 30 + legSwing * 0.25, 6, 11);
+  ctx.fillRect(18, 30 - legSwing * 0.25, 6, 11);
+  ctx.fillStyle = '#143b55';
+  ctx.fillRect(6 + Math.max(0, -legSwing) * 0.2, 39, 10, 4);
+  ctx.fillRect(17 + Math.max(0, legSwing) * 0.2, 39, 10, 4);
+
+  // arms sit behind and in front of the torso, giving depth.
+  ctx.strokeStyle = '#2d87bf';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 18);
+  ctx.lineTo(3, 26 - armSwing);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(24, 18);
+  ctx.lineTo(28, 26 + armSwing);
+  ctx.stroke();
+  ctx.fillStyle = '#d8fbff';
+  ctx.beginPath();
+  ctx.arc(3, 27 - armSwing, 2.8, 0, Math.PI * 2);
+  ctx.arc(28, 27 + armSwing, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const armor = ctx.createLinearGradient(0, 8, 0, player.h);
+  armor.addColorStop(0, '#9af3ff');
+  armor.addColorStop(0.55, '#2d87bf');
+  armor.addColorStop(1, '#1b5f91');
+  ctx.fillStyle = armor;
+  ctx.fillRect(5, 12, player.w - 10, 23);
+  ctx.fillStyle = '#d8fbff';
+  ctx.fillRect(7, 1, player.w - 14, 15);
+  ctx.fillStyle = '#c4f7ff';
+  ctx.fillRect(10, -2, player.w - 20, 5);
+  ctx.fillStyle = '#10344a';
+  ctx.fillRect(15, 5, 11, 5);
+  ctx.fillStyle = '#ffffffaa';
+  ctx.fillRect(17, 6, 4, 1.5);
+
+  // chest plate, belt, shoulder pads, and boot jets add visible model complexity.
+  ctx.fillStyle = '#b8f7ff';
+  ctx.fillRect(10, 16, 10, 8);
+  ctx.fillStyle = '#ffcf69';
+  ctx.fillRect(14, 18, 3, 3);
+  ctx.fillStyle = '#0f1b2a';
+  ctx.fillRect(7, 27, player.w - 14, 3);
+  ctx.fillStyle = '#71dfff';
+  ctx.fillRect(3, 13, 7, 5);
+  ctx.fillRect(player.w - 10, 13, 7, 5);
+
+  if (!player.onGround || state === 'dash') {
+    ctx.fillStyle = state === 'dash' ? '#fff3a3' : '#8ff7ff';
+    ctx.beginPath();
+    ctx.moveTo(9, 43);
+    ctx.lineTo(12, 50 + Math.sin(time * 32) * 3);
+    ctx.lineTo(15, 43);
+    ctx.moveTo(19, 43);
+    ctx.lineTo(22, 50 + Math.cos(time * 29) * 3);
+    ctx.lineTo(25, 43);
+    ctx.fill();
+  }
+
   ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
-  ctx.strokeRect(px, py, player.w, player.h);
+  ctx.strokeRect(5, 12, player.w - 10, 23);
+  ctx.strokeRect(7, 1, player.w - 14, 15);
+  ctx.restore();
 }
 
 function drawEnemy() {
@@ -625,60 +904,93 @@ function drawEnemy() {
       defeated: '#6f7688',
     };
     const stateColor = enemy.defeated ? colors.defeated : colors[enemy.state];
-    const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
-    const gradient = ctx.createRadialGradient(
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      4,
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      enemy.w / 2
-    );
+    const time = performance.now() / 1000 + enemy.x * 0.01;
+    const pulse = 1 + Math.sin(time * (enemy.state === 'alert' ? 9 : 5)) * 0.07;
+    const legStride = Math.sin(time * 12) * (enemy.state === 'alert' ? 4 : 2);
+    const cx = enemy.x + enemy.w / 2;
+    const cy = enemy.y + enemy.h / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, enemy.y + enemy.h + 4, enemy.w / 2, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Animated legs and feet make the patrol/chase state easier to read.
+    ctx.strokeStyle = '#2d1b1b';
+    ctx.lineWidth = 4;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 7, enemy.y + enemy.h - 6);
+      ctx.lineTo(cx + side * (8 + legStride), enemy.y + enemy.h + 5);
+      ctx.stroke();
+      ctx.fillStyle = '#2d1b1b';
+      ctx.fillRect(cx + side * (8 + legStride) - 4, enemy.y + enemy.h + 4, 8, 3);
+    }
+
+    const gradient = ctx.createRadialGradient(cx - 5, cy - 7, 4, cx, cy, enemy.w / 2 + 8);
     gradient.addColorStop(0, '#fff8');
-    gradient.addColorStop(1, stateColor);
+    gradient.addColorStop(0.55, stateColor);
+    gradient.addColorStop(1, '#3b2230');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + 2, (enemy.w / 2) * pulse, (enemy.h / 2 + 4) * pulse, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#1b1f2e';
+    // Horns/antennae, armor ring, eyes, and jaw add monster model detail.
+    ctx.strokeStyle = stateColor;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
-    ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
+    ctx.moveTo(cx - 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx - 18, enemy.y - 10, cx - 5, enemy.y - 3);
+    ctx.moveTo(cx + 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx + 18, enemy.y - 10, cx + 5, enemy.y - 3);
+    ctx.stroke();
+    ctx.strokeStyle = '#1b1f2e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 2, enemy.w / 2 - 2, 0.2, Math.PI * 1.8);
+    ctx.stroke();
+
+    ctx.fillStyle = enemy.state === 'alert' ? '#2d1b1b' : '#1b1f2e';
+    ctx.beginPath();
+    ctx.ellipse(enemy.x + 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(enemy.x + enemy.w - 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#ffffffaa';
+    ctx.fillRect(enemy.x + 10, enemy.y + 12, 2, 1.5);
+    ctx.fillRect(enemy.x + enemy.w - 12, enemy.y + 12, 2, 1.5);
 
-    const mouthWidth = enemy.state === 'alert' ? 14 : 9;
-    const mouthY = enemy.y + enemy.h - 10 + Math.sin(performance.now() / 220) * 1.2;
+    const mouthWidth = enemy.state === 'alert' ? 16 : 10;
+    const mouthY = enemy.y + enemy.h - 10 + Math.sin(time * 7) * 1.4;
     ctx.fillStyle = '#2d1b1b';
-    ctx.fillRect(enemy.x + enemy.w / 2 - mouthWidth / 2, mouthY, mouthWidth, 3);
-
+    ctx.fillRect(cx - mouthWidth / 2, mouthY, mouthWidth, 3);
     if (enemy.state === 'alert' && !enemy.defeated) {
       ctx.fillStyle = '#ffd2d2';
-      ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
-      ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+      ctx.fillRect(cx - 6, mouthY + 3, 3, 5);
+      ctx.fillRect(cx + 3, mouthY + 3, 3, 5);
     }
+
+    ctx.restore();
   }
 }
 
-function drawUI(level) {
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '16px sans-serif';
-  ctx.fillText(level.name, 16, 24);
-  const activeEnemies = enemies.filter((e) => !e.defeated).length;
-  const firstActive = enemies.find((e) => !e.defeated);
-  const enemyStateText = firstActive ? firstActive.state.toUpperCase() : 'DEFEATED';
-  ctx.fillText(`Enemy state: ${enemyStateText} | Active: ${activeEnemies}`, 16, 46);
-  const totalRelics = (level.relics || []).length;
-  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
-  ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
-  ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift dash, E interact, R reset', 16, 112);
-
+function drawTutorialGuides(level) {
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
     if (nearLever) {
+      const totalRelics = (level.relics || []).length;
+      const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+      const prompt = collectedRelics === totalRelics ? 'Press E' : `${collectedRelics}/${totalRelics} relics`;
+      ctx.save();
+      ctx.fillStyle = 'rgba(12, 17, 29, 0.72)';
+      ctx.fillRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
+      ctx.strokeStyle = '#ffe790';
+      ctx.strokeRect(level.lever.x - 38, level.lever.y - 34, 92, 24);
       ctx.fillStyle = '#ffe790';
-      ctx.fillText('Press E to pull joystick (all relics required)', level.lever.x - 84, level.lever.y - 10);
+      ctx.font = '14px sans-serif';
+      ctx.fillText(prompt, level.lever.x - 28, level.lever.y - 17);
+      ctx.restore();
     }
   }
 }
@@ -693,6 +1005,8 @@ function draw() {
   for (let i = 0; i < 12; i++) {
     ctx.fillRect(i * 90, 0, 45, canvas.height);
   }
+  drawDecorTilemap(level);
+  drawAmbientVfx(performance.now());
 
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
@@ -702,7 +1016,8 @@ function draw() {
   drawGate(level.gate);
   drawEnemy();
   drawPlayer();
-  drawUI(level);
+  drawParticles();
+  drawTutorialGuides(level);
 }
 
 let lastTime = performance.now();
@@ -713,6 +1028,7 @@ function loop(now) {
   updateDynamicFeatures(currentLevel(), dt, now);
   updatePlayer(dt);
   updateEnemy(dt);
+  updateParticles(dt);
   draw();
 
   keysPressed.clear();

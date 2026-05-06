@@ -3,17 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vertical Slice - Milestone 1</title>
+  <title>Vertical Slice - Polished Prototype</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main class="container">
-    <h1>Vertical Slice – Milestone 1 Prototype</h1>
+    <h1>Vertical Slice – Polished Prototype</h1>
     <p class="controls">
-      <strong>Controls:</strong> A/D or ←/→ move, Space jump, E interact, R reset.
+      <strong>Controls:</strong> A/D or ←/→ move, Space jump, Shift ground dash, E interact, R reset.
     </p>
     <canvas id="game" width="960" height="540" aria-label="2D platformer test levels"></canvas>
     <p id="status" class="status">Collect relics, pull joystick, then open each gate.</p>
+    <section class="devlog-card" aria-labelledby="graph-title">
+      <h2 id="graph-title">Visual scripting bridge (outside the game view)</h2>
+      <p>Gameplay stays clean: the canvas only shows tutorial prompts. The graph documentation lives here and in the devlog.</p>
+      <img src="docs/visual-scripting-graph.svg" alt="Visual scripting graph from relic pickup to joystick gate unlock and FX UI feedback" />
+    </section>
   </main>
   <script src="game.js"></script>
 </body>

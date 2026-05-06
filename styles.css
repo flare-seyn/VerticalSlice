@@ -36,3 +36,29 @@ canvas {
 .status {
   min-height: 1.2rem;
 }
+
+
+.devlog-card {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #31384c;
+  border-radius: 0.75rem;
+  background: #181d2b;
+}
+
+.devlog-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+}
+
+.devlog-card p {
+  margin: 0 0 0.75rem;
+  color: #c9d4ea;
+}
+
+.devlog-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+}
