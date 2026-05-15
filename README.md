@@ -14,21 +14,6 @@ This repository now includes a playable Milestone 1 web prototype with the requi
 - Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, and collectible relic objectives.
 - Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
 
-## Run Locally
-Because this is plain HTML/CSS/JS, you can run it with a static server:
-
-```bash
-python3 -m http.server 8000
-```
-
-Then open: `http://localhost:8000`
-
-## Controls
-- `A` / `D` or `Left` / `Right Arrow`: Move
-- `Space`: Jump
-- `Shift`: Ground dash
-- `E`: Interact (pull lever/joystick)
-- `R`: Reset/restart current level
 
 Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
 
