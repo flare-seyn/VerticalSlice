@@ -167,6 +167,19 @@ const player = {
   animationState: 'idle',
 };
 
+
+const EnemyStates = Object.freeze({
+  Patrol: 'patrol',
+  Alert: 'alert',
+  Reset: 'reset',
+});
+
+const EnemyStateDescriptions = Object.freeze({
+  [EnemyStates.Patrol]: 'Move between patrol bounds until the player enters detection range.',
+  [EnemyStates.Alert]: 'Chase toward the player at increased speed while the player stays nearby.',
+  [EnemyStates.Reset]: 'Return to the patrol start after the player escapes reset range.',
+});
+
 const levels = [
   {
     name: 'Level 1: Entry Hall',
@@ -478,11 +491,11 @@ function resetEnemy() {
     patrolMaxX: levelEnemy.patrolMaxX,
     detectionRange: levelEnemy.detectionRange,
     resetRange: levelEnemy.resetRange,
-    state: 'patrol',
+    state: EnemyStates.Patrol,
     direction: 1,
     defeated: false,
     animTime: 0,
-    lastState: 'patrol',
+    lastState: EnemyStates.Patrol,
   }));
 }
 
@@ -808,6 +821,64 @@ function updatePlayer(dt) {
   }
 }
 
+function getEnemyTransition(enemy, distanceToPlayer) {
+  if (enemy.state === EnemyStates.Patrol && distanceToPlayer < enemy.detectionRange) {
+    return EnemyStates.Alert;
+  }
+
+  if (enemy.state === EnemyStates.Alert && distanceToPlayer > enemy.resetRange) {
+    return EnemyStates.Reset;
+  }
+
+  if (enemy.state === EnemyStates.Reset && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
+    return EnemyStates.Patrol;
+  }
+
+  return enemy.state;
+}
+
+function enterEnemyState(enemy, nextState) {
+  if (enemy.state === nextState) return;
+
+  const previousState = enemy.state;
+  enemy.lastState = previousState;
+  enemy.state = nextState;
+
+  if (nextState === EnemyStates.Patrol) {
+    enemy.direction = 1;
+  }
+
+  if (nextState === EnemyStates.Alert) {
+    playSound('alert');
+    spawnParticles(enemy.x + enemy.w / 2, enemy.y + 2, 8, '#ff6b6b', { speed: 70, life: 0.3, size: 3 });
+  }
+}
+
+function updateEnemyPatrol(enemy, dt) {
+  enemy.vx = enemy.speed * enemy.direction;
+  enemy.x += enemy.vx * dt;
+
+  if (enemy.x <= enemy.patrolMinX) {
+    enemy.x = enemy.patrolMinX;
+    enemy.direction = 1;
+  } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
+    enemy.x = enemy.patrolMaxX - enemy.w;
+    enemy.direction = -1;
+  }
+}
+
+function updateEnemyAlert(enemy, dt, playerCenterX, enemyCenterX) {
+  enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.35 : enemy.speed * 1.35;
+  enemy.x += enemy.vx * dt;
+  enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
+}
+
+function updateEnemyReset(enemy, dt) {
+  enemy.vx = -enemy.speed;
+  enemy.x += enemy.vx * dt;
+  if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+}
+
 function updateEnemy(dt) {
   if (!enemies.length || player.won) return;
 
@@ -815,42 +886,17 @@ function updateEnemy(dt) {
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
     enemy.animTime += dt;
+
     const enemyCenterX = enemy.x + enemy.w / 2;
-    const dist = Math.abs(playerCenterX - enemyCenterX);
+    const distanceToPlayer = Math.abs(playerCenterX - enemyCenterX);
+    enterEnemyState(enemy, getEnemyTransition(enemy, distanceToPlayer));
 
-    if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
-      enemy.state = 'alert';
-      enemy.lastState = 'patrol';
-      playSound('alert');
-      spawnParticles(enemy.x + enemy.w / 2, enemy.y + 2, 8, '#ff6b6b', { speed: 70, life: 0.3, size: 3 });
-    } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
-      enemy.state = 'reset';
-      enemy.lastState = 'alert';
-    } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
-      enemy.state = 'patrol';
-      enemy.lastState = 'reset';
-      enemy.direction = 1;
-    }
-
-    if (enemy.state === 'patrol') {
-      enemy.vx = enemy.speed * enemy.direction;
-      enemy.x += enemy.vx * dt;
-
-      if (enemy.x <= enemy.patrolMinX) {
-        enemy.x = enemy.patrolMinX;
-        enemy.direction = 1;
-      } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
-        enemy.x = enemy.patrolMaxX - enemy.w;
-        enemy.direction = -1;
-      }
-    } else if (enemy.state === 'alert') {
-      enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.35 : enemy.speed * 1.35;
-      enemy.x += enemy.vx * dt;
-      enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
-    } else if (enemy.state === 'reset') {
-      enemy.vx = -enemy.speed;
-      enemy.x += enemy.vx * dt;
-      if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+    if (enemy.state === EnemyStates.Patrol) {
+      updateEnemyPatrol(enemy, dt);
+    } else if (enemy.state === EnemyStates.Alert) {
+      updateEnemyAlert(enemy, dt, playerCenterX, enemyCenterX);
+    } else if (enemy.state === EnemyStates.Reset) {
+      updateEnemyReset(enemy, dt);
     }
   }
 }

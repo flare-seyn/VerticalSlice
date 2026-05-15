@@ -32,16 +32,48 @@ Then open: `http://localhost:8000`
 
 Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
 
-## State Machine (MS1)
+## State Machine (MS1) — detailed implementation
+The enemy state machine is the main Milestone 1 state machine and it is still active in every level. It is implemented in `game.js` with explicit `EnemyStates`, transition evaluation in `getEnemyTransition()`, state-entry side effects in `enterEnemyState()`, and per-state actions in `updateEnemyPatrol()`, `updateEnemyAlert()`, and `updateEnemyReset()`.
+
 Enemy behavior uses three states:
-- **Patrol**: enemy moves back and forth in a fixed zone.
-- **Alert**: enemy speeds up and chases player direction when player is close.
-- **Reset**: enemy returns to patrol origin when player leaves range.
+- **Patrol**: the enemy moves horizontally between `patrolMinX` and `patrolMaxX`. Hitting either bound flips `direction`, so the enemy loops in a fixed guard zone.
+- **Alert**: the enemy has detected the player. It chases toward the player's current X position at `1.35×` its patrol speed, stays clamped inside its patrol arena, plays the alert audio cue, and emits red alert particles when entering the state.
+- **Reset**: the player escaped. The enemy stops chasing and walks back toward `patrolMinX`. When it reaches the patrol origin, it re-enters Patrol and faces right again.
 
 Transitions:
-- Patrol → Alert: player enters detection range.
-- Alert → Reset: player leaves reset range.
-- Reset → Patrol: enemy reaches patrol start area.
+- **Patrol → Alert**: `abs(playerCenterX - enemyCenterX) < detectionRange`.
+- **Alert → Reset**: `abs(playerCenterX - enemyCenterX) > resetRange`. The reset range is intentionally larger than the detection range so the enemy does not flicker states at the edge.
+- **Reset → Patrol**: `abs(enemy.x - patrolMinX) < 4`.
+
+Gameplay outcomes connected to the state machine:
+- Touching an active enemy from the side/front restarts the level.
+- Falling onto an enemy from above defeats it and bounces the player upward.
+- Defeated enemies count toward later gate requirements, which makes the state machine part of the complicating gameplay factor rather than just a visual behavior.
+
+State machine diagram: [`docs/enemy-state-machine.svg`](docs/enemy-state-machine.svg).
+
+
+## Milestone Feature 3: chosen Unity system
+The chosen Unity system is **Unity Visual Scripting**. Because this repository is a web prototype rather than a Unity project, the Unity-system integration is demonstrated as a devlog-only architecture bridge instead of extra UI inside `index.html` or the gameplay canvas.
+
+How the bridge maps to the intended Unity implementation:
+- `PlayerController.cs` would own movement, jump buffering, coyote time, ground dash, dash-refresh orb pickup, stomp detection, and player reset/win state.
+- `EnemyStateMachine.cs` would mirror the `EnemyStates` implementation in `game.js`: Patrol, Alert, and Reset, with the same detection/reset thresholds and transition rules.
+- `RelicGateGraphBridge.cs` would be the C# bridge that raises Visual Scripting custom events such as `RelicCollected`, `DashOrbCollected`, `EnemyDefeated`, `JoystickPulled`, and `GateUnlocked`.
+- The Visual Scripting Graph would receive those custom events and route feedback to audio, particle VFX, gate animation, and status feedback.
+
+Graph documentation remains in the devlog assets, not on the playable page:
+- Visual Scripting event bridge: [`docs/visual-scripting-graph.svg`](docs/visual-scripting-graph.svg)
+- Enemy state machine graph: [`docs/enemy-state-machine.svg`](docs/enemy-state-machine.svg)
+
+## Milestone Feature 4: complicating gameplay factor
+The complicating gameplay factor is the **multi-route gate unlock loop** layered on top of the platforming and enemy state machine. The player must still move, jump, avoid spikes, use the joystick lever, and survive enemies, but later levels vary the requirements:
+- **Standard relic gates**: early levels require all relics before the joystick opens the gate.
+- **Dash-refresh traversal**: dash orbs refresh dash in mid-route, letting the player choose more aggressive platforming lines without changing the base collision rules.
+- **Enemy-defeat route**: Level 3 can unlock by collecting all relics **or** defeating all active enemies.
+- **Combined mastery route**: Level 4 requires collecting all relics **and** defeating all active enemies before the final joystick unlocks.
+
+This preserves the original Milestone 1 mechanics while making the loop more variable: each chamber asks the player to decide whether to prioritize exploration, combat/stomping, or movement execution.
 
 ## Milestone 1 Devlog
 
@@ -76,15 +108,7 @@ The state machine is connected to other systems in the game. It depends on the *
 - Status text for fail, success, and replay instructions.
 - Win state + manual replay/reset flow.
 
-## Itch.io Description
-**Relic Runner: Vertical Slice** is a short 2D platformer prototype about collecting relics, reading enemy states, and unlocking joystick-controlled gates. The goal is to collect every relic in the current stage, return to the joystick lever, pull it, and reach the gate without falling into spikes or being caught by patrol enemies.
 
-**Controls:**
-- `A` / `D` or `Left` / `Right Arrow`: Move
-- `Space`: Jump
-- `Shift`: Ground dash
-- `E`: Interact with joystick levers
-- `R`: Reset or restart the current level
 
 ## Milestone 2 Devlog
 
@@ -113,14 +137,15 @@ For this milestone, I built on the existing relic-gated joystick mechanic and po
 The W5 task steps break-down helped because it forced me to separate the feature into testable chunks instead of treating “polish” as one vague task. The biggest benefit was preserving the already-working Milestone 1 requirements first, then layering visual and feedback complexity on top of the same collision boxes. If I did it again, I would improve the break-down by adding more explicit acceptance checks, such as “gate stays locked at 1/2 relics,” “enemy still changes to Alert near the player,” and “dash does not recharge in air.” That would make each task easier to verify after implementation.
 
 ### Visual scripting and code bridge
-The playable web build bridges code and a graph-style system through code-side gameplay events plus documentation outside the gameplay canvas. The code-side gameplay methods update relic collection, dash, dash-refresh orbs, bounce, hazard, enemy alert, and joystick unlock state; those events now trigger audio cues and particle VFX in `game.js`, while the Visual Scripting Graph itself is documented only in the devlog and in `docs/visual-scripting-graph.svg`. This serves the same architectural purpose as calling a Unity Visual Scripting custom event from C# after gameplay logic succeeds: gameplay code owns rules and collision, while the graph owns readable feedback/FX routing.
+The playable web build bridges code and a graph-style system through code-side gameplay events plus documentation outside the gameplay canvas. The code-side gameplay methods update relic collection, dash, dash-refresh orbs, bounce pads, hazards, enemy alerts, enemy defeat, joystick unlock state, and gate transitions. Those events trigger audio cues and particle VFX in `game.js`, while the Visual Scripting Graph itself is documented only in the devlog assets: [`docs/visual-scripting-graph.svg`](docs/visual-scripting-graph.svg) and [`docs/enemy-state-machine.svg`](docs/enemy-state-machine.svg).
 
 For the Unity version, the equivalent C# scripts would be:
-- `PlayerController.cs`: owns movement, jump buffering, dash state, and calls the graph event when dash feedback should play.
-- `RelicGateGraphBridge.cs`: listens for relic collection and joystick interactions, then raises a `GateUnlock` custom event into the Visual Scripting Graph.
+- `PlayerController.cs`: owns movement, jump buffering, coyote time, ground dash, dash-refresh orb pickup, stomp detection, and player reset/win state.
+- `EnemyStateMachine.cs`: owns Patrol, Alert, and Reset, using the same transition conditions described in the State Machine section.
+- `RelicGateGraphBridge.cs`: listens for relic collection, dash orb collection, enemy defeat, and joystick interactions, then raises custom Visual Scripting events such as `RelicCollected`, `DashOrbCollected`, `EnemyDefeated`, and `GateUnlocked`.
 - `GateController.cs`: receives the unlock result and changes the gate from locked to open.
 
-The relevant Graph screenshot is included at [`docs/visual-scripting-graph.svg`](docs/visual-scripting-graph.svg).
+This architecture keeps rules and collision in code while allowing the Visual Scripting Graph to own readable feedback/FX routing.
 
 ### Unity system integration note
 The chosen Unity system for the intended Unity build is **Unity Visual Scripting**. In this repository's HTML5 prototype, that system is represented by devlog-only graph documentation plus gameplay events that route to audio/VFX feedback, so the architecture can be demonstrated without adding extra non-tutorial text to the game screen or the index page. The implemented flow mirrors a Visual Scripting Graph receiving custom gameplay events from code and routing feedback to UI/FX.
