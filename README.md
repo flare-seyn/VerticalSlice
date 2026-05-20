@@ -4,14 +4,14 @@
 This repository now includes a playable Milestone 1 web prototype with the required core scope:
 - Player can move left/right and jump.
 - Test levels have platforming obstacles (gaps + spikes).
-- Player can reach progression gates across four levels, then complete the final gauntlet.
+- Player can reach progression gates across six levels, then complete the final gauntlet.
 - Enemy uses a behavior state machine with **Patrol → Alert → Reset**.
 - Includes interactive **joystick/lever pulls** to unlock progression gates.
 - Player and enemy use more polished, distinct visual materials/styles.
 - Player and enemy models now include layered parts and richer animation states for idle, run, jump/fall, dash, patrol, alert, reset, and defeated reads.
 - Moved the Visual Scripting bridge explanation outside the gameplay canvas so the game screen only shows tutorial prompts.
 - Added audio effects, particle VFX, ambient VFX, and decorative tilemap layers for stronger polish.
-- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, and collectible relic objectives.
+- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, laser-bar traps, saw-blade traps, and collectible relic objectives.
 - Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
 
 
@@ -165,7 +165,7 @@ For Milestone 3, I implemented a shader-style effect pipeline in the web prototy
 Based on playtesting feedback, I improved readability and pacing by making level goals clearer and reducing “one-path-only” frustration. Specifically, later levels now support alternate unlock routes (`relicsOrEnemies`, `relicsAndEnemies`) so players can recover from missed relic routes by using combat skill, and status messaging now tells players the missing requirement before a gate opens. I also kept dash-refresh orbs, bounce pads, and moving/crumble platform timing in the loop so players can repeatedly execute movement mechanics across multiple chambers rather than only one encounter.
 
 ### Prompt 3: New content since last Milestone and gameplay-loop context
-I added enough content to close the main loop across multiple repetitions: four playable levels, additional enemies, extra relic objectives, dash-refresh orbs, multiple bounce/moving/crumble platform setups, and varied gate conditions. This means the player repeatedly performs the full loop—traverse, avoid hazards, manage enemy pressure/state-machine behavior, collect/defeat for unlock requirements, pull joystick, and advance—across several tasks instead of a single isolated completion. The result is a fuller vertical slice where the core mechanic is executed multiple times in different contexts.
+I added enough content to close the main loop across multiple repetitions: six playable levels, additional enemies, extra relic objectives, dash-refresh orbs, multiple bounce/moving/crumble platform setups, and varied gate conditions. This means the player repeatedly performs the full loop—traverse, avoid hazards, manage enemy pressure/state-machine behavior, collect/defeat for unlock requirements, pull joystick, and advance—across several tasks instead of a single isolated completion. The result is a fuller vertical slice where the core mechanic is executed multiple times in different contexts.
 
 
 ## Milestone 4 Devlog

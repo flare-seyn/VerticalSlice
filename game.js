@@ -205,6 +205,8 @@ const levels = [
     ],
     bouncePads: [{ x: 860, y: 302, w: 38, h: 18, force: 900 }],
     crumblePlatforms: [],
+    laserBars: [{ x: 610, y: 465, w: 80, h: 8, axis: 'x', range: 60, speed: 2.2, phase: 0.0, active: true }],
+    sawBlades: [{ x: 410, y: 476, r: 12, axis: 'y', range: 24, speed: 2.4, phase: 0.2 }],
     relics: [
       { x: 355, y: 470, w: 14, h: 14, collected: false },
       { x: 780, y: 350, w: 14, h: 14, collected: false },
@@ -255,6 +257,8 @@ const levels = [
     crumblePlatforms: [
       { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
     ],
+    laserBars: [{ x: 604, y: 440, w: 96, h: 8, axis: 'y', range: 58, speed: 2.1, phase: 1.1, active: true }],
+    sawBlades: [{ x: 314, y: 434, r: 13, axis: 'x', range: 38, speed: 2.0, phase: 0.4 }],
     relics: [
       { x: 505, y: 386, w: 14, h: 14, collected: false },
       { x: 736, y: 432, w: 14, h: 14, collected: false },
@@ -434,6 +438,66 @@ const levels = [
       },
     ],
   },
+,
+  {
+    name: 'Level 5: Furnace Corridor',
+    start: { x: 30, y: 430 },
+    unlockMode: 'relicsOrEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 100, type: 'wall' },
+      { x: 120, y: 136, w: 180, h: 32, type: 'trim' },
+      { x: 520, y: 136, w: 220, h: 32, type: 'wall' },
+      { x: 280, y: 460, w: 90, h: 32, type: 'crystal' }
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 180, h: 40 }, { x: 220, y: 460, w: 130, h: 20 },
+      { x: 420, y: 420, w: 120, h: 20 }, { x: 610, y: 380, w: 120, h: 20 },
+      { x: 810, y: 500, w: 150, h: 40 }
+    ],
+    spikes: [{ x: 185, y: 500, w: 30, h: 40 }, { x: 555, y: 500, w: 42, h: 40 }],
+    movingPlatforms: [{ x: 520, y: 330, w: 88, h: 16, axis: 'y', origin: 330, range: 72, speed: 1.7, phase: 0.3 }],
+    bouncePads: [{ x: 436, y: 402, w: 38, h: 18, force: 960 }],
+    dashOrbs: [{ x: 650, y: 350, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 260, y: 390, w: 80, h: 16, state: 'solid', timer: 0 }],
+    laserBars: [{ x: 690, y: 364, w: 90, h: 8, axis: 'x', range: 55, speed: 2.5, phase: 0.7, active: true }],
+    sawBlades: [{ x: 500, y: 404, r: 13, axis: 'x', range: 48, speed: 2.1, phase: 0.2 }],
+    relics: [{ x: 244, y: 438, w: 14, h: 14, collected: false }, { x: 648, y: 356, w: 14, h: 14, collected: false }],
+    lever: { x: 846, y: 460, w: 18, h: 40, pulled: false, promptRange: 72 },
+    gate: { x: 912, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemies: [
+      { spawnX: 430, y: 386, w: 34, h: 34, speed: 86, patrolMinX: 420, patrolMaxX: 540, detectionRange: 130, resetRange: 210 },
+      { spawnX: 626, y: 346, w: 34, h: 34, speed: 90, patrolMinX: 610, patrolMaxX: 730, detectionRange: 136, resetRange: 214 }
+    ],
+  },
+  {
+    name: 'Level 6: Core Vault',
+    start: { x: 34, y: 430 },
+    unlockMode: 'relicsAndEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' }, { x: 88, y: 140, w: 210, h: 32, type: 'trim' },
+      { x: 620, y: 140, w: 220, h: 32, type: 'wall' }, { x: 420, y: 460, w: 110, h: 32, type: 'crystal' }
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 170, h: 40 }, { x: 220, y: 470, w: 120, h: 20 }, { x: 410, y: 430, w: 120, h: 20 },
+      { x: 610, y: 390, w: 120, h: 20 }, { x: 800, y: 350, w: 160, h: 20 }, { x: 820, y: 500, w: 140, h: 40 }
+    ],
+    spikes: [{ x: 176, y: 500, w: 38, h: 40 }, { x: 365, y: 500, w: 44, h: 40 }, { x: 548, y: 500, w: 48, h: 40 }],
+    movingPlatforms: [{ x: 300, y: 330, w: 86, h: 16, axis: 'y', origin: 330, range: 78, speed: 1.8, phase: 0.2 }, { x: 660, y: 300, w: 86, h: 16, axis: 'x', origin: 660, range: 92, speed: 2.0, phase: 0.6 }],
+    bouncePads: [{ x: 228, y: 452, w: 38, h: 18, force: 980 }, { x: 838, y: 332, w: 38, h: 18, force: 920 }],
+    dashOrbs: [{ x: 328, y: 304, r: 10, active: true, timer: 0 }, { x: 702, y: 286, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 450, y: 350, w: 80, h: 16, state: 'solid', timer: 0 }, { x: 742, y: 305, w: 76, h: 16, state: 'solid', timer: 0 }],
+    laserBars: [{ x: 500, y: 422, w: 96, h: 8, axis: 'x', range: 70, speed: 2.7, phase: 0.9, active: true }, { x: 830, y: 338, w: 86, h: 8, axis: 'y', range: 52, speed: 2.3, phase: 1.3, active: true }],
+    sawBlades: [{ x: 612, y: 372, r: 13, axis: 'x', range: 45, speed: 2.2, phase: 0.8 }, { x: 476, y: 412, r: 14, axis: 'y', range: 26, speed: 2.0, phase: 0.4 }],
+    relics: [{ x: 250, y: 440, w: 14, h: 14, collected: false }, { x: 702, y: 282, w: 14, h: 14, collected: false }, { x: 884, y: 322, w: 14, h: 14, collected: false }],
+    lever: { x: 838, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemies: [
+      { spawnX: 412, y: 396, w: 34, h: 34, speed: 92, patrolMinX: 400, patrolMaxX: 530, detectionRange: 136, resetRange: 215 },
+      { spawnX: 640, y: 356, w: 34, h: 34, speed: 96, patrolMinX: 610, patrolMaxX: 742, detectionRange: 140, resetRange: 220 },
+      { spawnX: 830, y: 316, w: 34, h: 34, speed: 90, patrolMinX: 800, patrolMaxX: 950, detectionRange: 132, resetRange: 210 }
+    ],
+  }
+
 ];
 
 let currentLevelIndex = 0;
@@ -526,6 +590,32 @@ function loadLevel(index, message) {
       p.state = 'solid';
       p.timer = 0;
     });
+  }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
+  }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
   }
   if (level.dashOrbs) {
     level.dashOrbs.forEach((orb) => {
@@ -758,6 +848,33 @@ function updatePlayer(dt) {
         playSound('collect');
         spawnParticles(orb.x, orb.y, 18, '#8ff7ff', { speed: 110, life: 0.42, size: 4 });
         setStatus('Dash orb refreshed.');
+      }
+    }
+  }
+
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      const hit = { x: (lb.cx ?? lb.x), y: (lb.cy ?? lb.y), w: lb.w, h: lb.h };
+      if (lb.active && overlap(player, hit)) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Laser trap hit!');
+        return;
+      }
+    }
+  }
+
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      const cX = saw.cx ?? saw.x;
+      const cY = saw.cy ?? saw.y;
+      const nearX = Math.abs((player.x + player.w / 2) - cX) < (saw.r + player.w * 0.45);
+      const nearY = Math.abs((player.y + player.h / 2) - cY) < (saw.r + player.h * 0.45);
+      if (nearX && nearY) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Saw trap hit!');
+        return;
       }
     }
   }
@@ -1020,6 +1137,43 @@ function drawDashOrbs(orbs) {
   }
 }
 
+function drawLaserBars(laserBars) {
+  const t = performance.now() / 1000;
+  for (const lb of laserBars || []) {
+    const x = lb.cx ?? lb.x; const y = lb.cy ?? lb.y;
+    ctx.globalAlpha = lb.active ? 0.9 : 0.25;
+    ctx.fillStyle = lb.active ? '#ff5f7a' : '#8a4857';
+    ctx.fillRect(x, y, lb.w, lb.h);
+    if (lb.active) {
+      ctx.fillStyle = `rgba(255,200,210,${0.25 + Math.sin(t*14)*0.1})`;
+      ctx.fillRect(x, y - 2, lb.w, lb.h + 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawSawBlades(sawBlades) {
+  const t = performance.now() / 1000;
+  for (const saw of sawBlades || []) {
+    const cx = saw.cx ?? saw.x; const cy = saw.cy ?? saw.y;
+    const teeth = 10;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t * saw.speed);
+    ctx.fillStyle = '#cfd8e6';
+    ctx.beginPath();
+    for (let i = 0; i < teeth * 2; i++) {
+      const a = (Math.PI * 2 * i) / (teeth * 2);
+      const r = i % 2 === 0 ? saw.r : saw.r * 0.62;
+      const x = Math.cos(a) * r; const y = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5e6a7d'; ctx.beginPath(); ctx.arc(0,0,saw.r*0.28,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
 function drawRelics(relics) {
   for (const relic of relics || []) {
     if (relic.collected) continue;
@@ -1160,7 +1314,7 @@ function drawPlayer() {
   ctx.fillStyle = '#ffffffaa';
   ctx.fillRect(17, 6, 4, 1.5);
 
-  // chest plate, belt, shoulder pads, and boot jets add visible model complexity.
+  // chest plate, belt, shoulder pads, knee guards, and boot jets add visible model complexity.
   ctx.fillStyle = '#b8f7ff';
   ctx.fillRect(10, 16, 10, 8);
   ctx.fillStyle = '#ffcf69';
@@ -1170,6 +1324,9 @@ function drawPlayer() {
   ctx.fillStyle = '#71dfff';
   ctx.fillRect(3, 13, 7, 5);
   ctx.fillRect(player.w - 10, 13, 7, 5);
+  ctx.fillStyle = '#19486a';
+  ctx.fillRect(8, 35, 5, 4);
+  ctx.fillRect(17, 35, 5, 4);
 
   if (!player.onGround || state === 'dash') {
     ctx.fillStyle = state === 'dash' ? '#fff3a3' : '#8ff7ff';
@@ -1307,6 +1464,8 @@ function draw() {
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
   drawBouncePads(level.bouncePads);
+  drawLaserBars(level.laserBars);
+  drawSawBlades(level.sawBlades);
   drawDashOrbs(level.dashOrbs);
   drawRelics(level.relics);
   drawLever(level.lever);
@@ -1333,5 +1492,5 @@ function loop(now) {
 }
 
 buildMaterials();
-loadLevel(0, 'Level 1 started. Pull the joystick to open the first gate.');
+loadLevel(0, 'Level 1 started. Complete objectives, pull joystick, clear 6 levels.');
 requestAnimationFrame(loop);
