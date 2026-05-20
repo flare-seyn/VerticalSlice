@@ -985,19 +985,34 @@ function drawBouncePads(bouncePads) {
 }
 
 
+
+function hash2D(x, y) {
+  const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+function shaderPulse(uvx, uvy, time, speed, density) {
+  const flowX = uvx + time * speed;
+  const flowY = uvy + Math.sin(time * 0.7 + uvx * 6.0) * 0.15;
+  const cell = hash2D(Math.floor(flowX * density), Math.floor(flowY * density));
+  const edge = 1 - Math.abs(((flowX * density) % 1) - 0.5) * 2;
+  return Math.max(0, cell * edge);
+}
+
 function drawDashOrbs(orbs) {
   const time = performance.now() / 1000;
   for (const orb of orbs || []) {
     const alpha = orb.active ? 1 : 0.25;
     const pulse = Math.sin(time * 7 + orb.x * 0.01) * 2;
+    const shaderMask = shaderPulse(orb.x / world.width, orb.y / world.height, time, 0.45, 9);
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#8ff7ff';
+    ctx.strokeStyle = `rgba(143, 247, 255, ${0.45 + shaderMask * 0.55})`;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(orb.x, orb.y, orb.r + pulse, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = '#d8fbff';
+    ctx.fillStyle = `rgba(216, 251, 255, ${0.55 + shaderMask * 0.45})`;
     ctx.beginPath();
     ctx.arc(orb.x, orb.y, Math.max(3, orb.r - 4 + pulse * 0.4), 0, Math.PI * 2);
     ctx.fill();
@@ -1020,10 +1035,14 @@ function drawRelics(relics) {
 }
 
 function drawGate(gate) {
+  const time = performance.now() / 1000;
   const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
+  const shaderEnergy = shaderPulse(gate.x / world.width, gate.y / world.height, time, 0.3, 7);
   gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
   gateGradient.addColorStop(1, gate.locked ? '#5b4f40' : '#2e9d62');
   ctx.fillStyle = gateGradient;
+  ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
+  ctx.fillStyle = `rgba(143, 247, 255, ${gate.locked ? 0.06 : 0.12 + shaderEnergy * 0.25})`;
   ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
   ctx.fillStyle = '#2f2f2f';
   ctx.fillRect(gate.x + 5, gate.y + 8, gate.w - 10, gate.h - 16);

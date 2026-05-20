@@ -20,6 +20,18 @@ Goal: collect relics in each stage, use movement tools like bounce pads and dash
 ## State Machine (MS1) — detailed implementation
 The enemy state machine is the main Milestone 1 state machine and it is still active in every level. It is implemented in `game.js` with explicit `EnemyStates`, transition evaluation in `getEnemyTransition()`, state-entry side effects in `enterEnemyState()`, and per-state actions in `updateEnemyPatrol()`, `updateEnemyAlert()`, and `updateEnemyReset()`.
 
+## Controls
+- `A` / `D` or `Left` / `Right Arrow`: Move
+- `Space`: Jump
+- `Shift`: Ground dash
+- `E`: Interact (pull lever/joystick)
+- `R`: Reset/restart current level
+
+Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
+
+## State Machine (MS1) — detailed implementation
+The enemy state machine is the main Milestone 1 state machine and it is still active in every level. It is implemented in `game.js` with explicit `EnemyStates`, transition evaluation in `getEnemyTransition()`, state-entry side effects in `enterEnemyState()`, and per-state actions in `updateEnemyPatrol()`, `updateEnemyAlert()`, and `updateEnemyReset()`.
+
 Enemy behavior uses three states:
 - **Patrol**: the enemy moves horizontally between `patrolMinX` and `patrolMaxX`. Hitting either bound flips `direction`, so the enemy loops in a fixed guard zone.
 - **Alert**: the enemy has detected the player. It chases toward the player's current X position at `1.35×` its patrol speed, stays clamped inside its patrol arena, plays the alert audio cue, and emits red alert particles when entering the state.
@@ -93,7 +105,15 @@ The state machine is connected to other systems in the game. It depends on the *
 - Status text for fail, success, and replay instructions.
 - Win state + manual replay/reset flow.
 
+## Itch.io Description
+**Relic Runner: Vertical Slice** is a short 2D platformer prototype about collecting relics, reading enemy states, and unlocking joystick-controlled gates. The goal is to collect every relic in the current stage, return to the joystick lever, pull it, and reach the gate without falling into spikes or being caught by patrol enemies.
 
+**Controls:**
+- `A` / `D` or `Left` / `Right Arrow`: Move
+- `Space`: Jump
+- `Shift`: Ground dash
+- `E`: Interact with joystick levers
+- `R`: Reset or restart the current level
 
 ## Milestone 2 Devlog
 
@@ -137,7 +157,16 @@ The chosen Unity system for the intended Unity build is **Unity Visual Scripting
 
 
 ## Milestone 3 Devlog
-Milestone 3 Devlog goes here.
+
+### Prompt 1: Describe how your ShaderGraph works
+For Milestone 3, I implemented a shader-style effect pipeline in the web prototype that mirrors a Unity Shader Graph flow. The core function is `shaderPulse(uvx, uvy, time, speed, density)` and it is used by `drawGate()` and `drawDashOrbs()`. Technically, this effect combines UV-based flow (`uv + time * speed`), a sine-based vertical distortion term, a hash/noise sample (`hash2D`), and an edge mask (similar to a smooth band mask), then multiplies/clamps the result to drive emissive intensity. In Shader Graph terms, this maps to **UV → Tiling/Offset → Simple Noise/Hash → Sine distortion → Multiply/Clamp → Base+Emission blend**. In the game, graders can see it on the **gate glow panel** and **dash orb ring brightness pulse** during play. Shader graph screenshot: [`docs/shader-graph-m3.svg`](docs/shader-graph-m3.svg). Relevant code hooks are `hash2D`, `shaderPulse`, `drawGate`, and `drawDashOrbs` in `game.js`.
+
+### Prompt 2: Gameplay improvements from playtesting
+Based on playtesting feedback, I improved readability and pacing by making level goals clearer and reducing “one-path-only” frustration. Specifically, later levels now support alternate unlock routes (`relicsOrEnemies`, `relicsAndEnemies`) so players can recover from missed relic routes by using combat skill, and status messaging now tells players the missing requirement before a gate opens. I also kept dash-refresh orbs, bounce pads, and moving/crumble platform timing in the loop so players can repeatedly execute movement mechanics across multiple chambers rather than only one encounter.
+
+### Prompt 3: New content since last Milestone and gameplay-loop context
+I added enough content to close the main loop across multiple repetitions: four playable levels, additional enemies, extra relic objectives, dash-refresh orbs, multiple bounce/moving/crumble platform setups, and varied gate conditions. This means the player repeatedly performs the full loop—traverse, avoid hazards, manage enemy pressure/state-machine behavior, collect/defeat for unlock requirements, pull joystick, and advance—across several tasks instead of a single isolated completion. The result is a fuller vertical slice where the core mechanic is executed multiple times in different contexts.
+
 
 ## Milestone 4 Devlog
 Milestone 4 Devlog goes here.
