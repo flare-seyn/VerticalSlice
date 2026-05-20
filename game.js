@@ -10,6 +10,8 @@ const world = {
 
 const material = {
   platformPattern: null,
+  wallPattern: null,
+  trimPattern: null,
 };
 
 function buildMaterials() {
@@ -28,6 +30,107 @@ function buildMaterials() {
   tctx.lineTo(24, 12);
   tctx.stroke();
   material.platformPattern = ctx.createPattern(tile, 'repeat');
+
+  const wall = document.createElement('canvas');
+  wall.width = 32;
+  wall.height = 32;
+  const wctx = wall.getContext('2d');
+  wctx.fillStyle = '#182033';
+  wctx.fillRect(0, 0, wall.width, wall.height);
+  wctx.fillStyle = '#202a44';
+  wctx.fillRect(1, 1, 30, 30);
+  wctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+  wctx.strokeRect(6, 6, 20, 20);
+  material.wallPattern = ctx.createPattern(wall, 'repeat');
+
+  const trim = document.createElement('canvas');
+  trim.width = 16;
+  trim.height = 16;
+  const rctx = trim.getContext('2d');
+  rctx.fillStyle = '#293554';
+  rctx.fillRect(0, 0, trim.width, trim.height);
+  rctx.fillStyle = '#8ff7ff';
+  rctx.globalAlpha = 0.22;
+  rctx.fillRect(0, 0, 16, 3);
+  rctx.fillRect(0, 13, 16, 3);
+  material.trimPattern = ctx.createPattern(trim, 'repeat');
+}
+
+
+let audioContext = null;
+const particles = [];
+
+function initAudio() {
+  if (audioContext) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  audioContext = new AudioCtor();
+  if (audioContext.state === 'suspended') audioContext.resume();
+}
+
+function playSound(type) {
+  if (!audioContext) return;
+  const soundMap = {
+    jump: { frequency: 420, end: 660, duration: 0.09, gain: 0.035, wave: 'triangle' },
+    dash: { frequency: 180, end: 80, duration: 0.12, gain: 0.045, wave: 'sawtooth' },
+    collect: { frequency: 640, end: 980, duration: 0.16, gain: 0.035, wave: 'sine' },
+    unlock: { frequency: 360, end: 760, duration: 0.22, gain: 0.05, wave: 'triangle' },
+    bounce: { frequency: 260, end: 520, duration: 0.13, gain: 0.04, wave: 'square' },
+    hazard: { frequency: 170, end: 70, duration: 0.18, gain: 0.05, wave: 'sawtooth' },
+    alert: { frequency: 520, end: 300, duration: 0.11, gain: 0.025, wave: 'square' },
+  };
+  const config = soundMap[type];
+  if (!config) return;
+  const now = audioContext.currentTime;
+  const osc = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+  osc.type = config.wave;
+  osc.frequency.setValueAtTime(config.frequency, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, config.end), now + config.duration);
+  gain.gain.setValueAtTime(config.gain, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + config.duration);
+  osc.connect(gain);
+  gain.connect(audioContext.destination);
+  osc.start(now);
+  osc.stop(now + config.duration);
+}
+
+function spawnParticles(x, y, count, color, options = {}) {
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.7;
+    const speed = (options.speed || 80) * (0.45 + Math.random());
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed + (options.vx || 0),
+      vy: Math.sin(angle) * speed + (options.vy || 0),
+      life: options.life || 0.45,
+      maxLife: options.life || 0.45,
+      size: options.size || 4,
+      color,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const particle = particles[i];
+    particle.life -= dt;
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += 220 * dt;
+    if (particle.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  for (const particle of particles) {
+    const alpha = Math.max(0, particle.life / particle.maxLife);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = particle.color;
+    ctx.fillRect(particle.x, particle.y, particle.size * alpha, particle.size * alpha);
+  }
+  ctx.globalAlpha = 1;
 }
 
 const keysHeld = new Set();
@@ -36,6 +139,7 @@ window.addEventListener('keydown', (e) => {
   const code = e.code;
   if (["ArrowLeft", "ArrowRight", "Space", "KeyA", "KeyD", "KeyR", "KeyE", "ShiftLeft", "ShiftRight"].includes(code)) {
     e.preventDefault();
+    initAudio();
   }
   if (!keysHeld.has(code)) keysPressed.add(code);
   keysHeld.add(code);
@@ -59,12 +163,35 @@ const player = {
   dashTimer: 0,
   coyoteTimer: 0,
   jumpBufferTimer: 0,
+  animTime: 0,
+  animationState: 'idle',
 };
+
+
+const EnemyStates = Object.freeze({
+  Patrol: 'patrol',
+  Alert: 'alert',
+  Reset: 'reset',
+});
+
+const EnemyStateDescriptions = Object.freeze({
+  [EnemyStates.Patrol]: 'Move between patrol bounds until the player enters detection range.',
+  [EnemyStates.Alert]: 'Chase toward the player at increased speed while the player stays nearby.',
+  [EnemyStates.Reset]: 'Return to the patrol start after the player escapes reset range.',
+});
 
 const levels = [
   {
     name: 'Level 1: Entry Hall',
     start: { x: 40, y: 420 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 96, type: 'wall' },
+      { x: 64, y: 132, w: 160, h: 32, type: 'trim' },
+      { x: 382, y: 108, w: 128, h: 32, type: 'trim' },
+      { x: 668, y: 130, w: 192, h: 32, type: 'wall' },
+      { x: 120, y: 448, w: 64, h: 32, type: 'crystal' },
+      { x: 590, y: 392, w: 64, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 240, h: 40 },
       { x: 320, y: 500, w: 180, h: 40 },
@@ -78,6 +205,8 @@ const levels = [
     ],
     bouncePads: [{ x: 860, y: 302, w: 38, h: 18, force: 900 }],
     crumblePlatforms: [],
+    laserBars: [{ x: 610, y: 465, w: 80, h: 8, axis: 'x', range: 60, speed: 2.2, phase: 0.0, active: true }],
+    sawBlades: [{ x: 410, y: 476, r: 12, axis: 'y', range: 24, speed: 2.4, phase: 0.2 }],
     relics: [
       { x: 355, y: 470, w: 14, h: 14, collected: false },
       { x: 780, y: 350, w: 14, h: 14, collected: false },
@@ -101,6 +230,14 @@ const levels = [
   {
     name: 'Level 2: Lever Chamber',
     start: { x: 30, y: 300 },
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
+      { x: 32, y: 146, w: 128, h: 32, type: 'trim' },
+      { x: 332, y: 118, w: 224, h: 32, type: 'wall' },
+      { x: 690, y: 140, w: 192, h: 32, type: 'trim' },
+      { x: 292, y: 402, w: 96, h: 32, type: 'crystal' },
+      { x: 742, y: 412, w: 80, h: 32, type: 'crystal' },
+    ],
     platforms: [
       { x: 0, y: 500, w: 230, h: 40 },
       { x: 265, y: 450, w: 180, h: 20 },
@@ -116,16 +253,19 @@ const levels = [
       { x: 510, y: 360, w: 86, h: 16, axis: 'x', origin: 510, range: 90, speed: 1.6, phase: 0.6 },
     ],
     bouncePads: [{ x: 715, y: 442, w: 38, h: 18, force: 980 }],
+    dashOrbs: [{ x: 544, y: 320, r: 10, active: true, timer: 0 }],
     crumblePlatforms: [
       { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
     ],
+    laserBars: [{ x: 604, y: 440, w: 96, h: 8, axis: 'y', range: 58, speed: 2.1, phase: 1.1, active: true }],
+    sawBlades: [{ x: 314, y: 434, r: 13, axis: 'x', range: 38, speed: 2.0, phase: 0.4 }],
     relics: [
       { x: 505, y: 386, w: 14, h: 14, collected: false },
       { x: 736, y: 432, w: 14, h: 14, collected: false },
       { x: 838, y: 472, w: 14, h: 14, collected: false },
     ],
     lever: { x: 340, y: 410, w: 18, h: 40, pulled: false, promptRange: 66 },
-    gate: { x: 900, y: 445, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    gate: { x: 900, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
     enemies: [
       {
         spawnX: 640,
@@ -151,6 +291,213 @@ const levels = [
       },
     ],
   },
+
+  {
+    name: 'Level 3: Split Route Atrium',
+    start: { x: 32, y: 430 },
+    unlockMode: 'relicsOrEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 104, type: 'wall' },
+      { x: 110, y: 130, w: 160, h: 32, type: 'trim' },
+      { x: 420, y: 124, w: 180, h: 32, type: 'wall' },
+      { x: 710, y: 126, w: 180, h: 32, type: 'trim' },
+      { x: 450, y: 452, w: 90, h: 32, type: 'crystal' },
+      { x: 760, y: 372, w: 96, h: 32, type: 'crystal' },
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 180, h: 40 },
+      { x: 240, y: 470, w: 140, h: 20 },
+      { x: 440, y: 430, w: 120, h: 20 },
+      { x: 650, y: 390, w: 120, h: 20 },
+      { x: 830, y: 500, w: 130, h: 40 },
+      { x: 130, y: 345, w: 130, h: 20 },
+      { x: 340, y: 305, w: 120, h: 20 },
+    ],
+    spikes: [
+      { x: 190, y: 500, w: 42, h: 40 },
+      { x: 575, y: 500, w: 48, h: 40 },
+      { x: 780, y: 500, w: 42, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 520, y: 330, w: 84, h: 16, axis: 'y', origin: 330, range: 52, speed: 1.5, phase: 0.1 },
+      { x: 690, y: 455, w: 90, h: 16, axis: 'x', origin: 690, range: 65, speed: 1.4, phase: 1.1 },
+    ],
+    bouncePads: [{ x: 148, y: 327, w: 38, h: 18, force: 930 }],
+    dashOrbs: [
+      { x: 395, y: 280, r: 10, active: true, timer: 0 },
+      { x: 708, y: 360, r: 10, active: true, timer: 0 },
+    ],
+    crumblePlatforms: [
+      { x: 275, y: 385, w: 76, h: 16, state: 'solid', timer: 0 },
+      { x: 590, y: 350, w: 78, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 150, y: 315, w: 14, h: 14, collected: false },
+      { x: 365, y: 278, w: 14, h: 14, collected: false },
+      { x: 688, y: 362, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 848, y: 460, w: 18, h: 40, pulled: false, promptRange: 72 },
+    gate: { x: 912, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemies: [
+      {
+        spawnX: 452,
+        y: 396,
+        w: 34,
+        h: 34,
+        speed: 78,
+        patrolMinX: 430,
+        patrolMaxX: 558,
+        detectionRange: 115,
+        resetRange: 190,
+      },
+      {
+        spawnX: 672,
+        y: 356,
+        w: 34,
+        h: 34,
+        speed: 80,
+        patrolMinX: 650,
+        patrolMaxX: 770,
+        detectionRange: 120,
+        resetRange: 195,
+      },
+    ],
+  },
+  {
+    name: 'Level 4: Exit Gauntlet',
+    start: { x: 36, y: 430 },
+    unlockMode: 'relicsAndEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
+      { x: 72, y: 135, w: 210, h: 32, type: 'trim' },
+      { x: 384, y: 126, w: 170, h: 32, type: 'wall' },
+      { x: 642, y: 134, w: 228, h: 32, type: 'trim' },
+      { x: 210, y: 452, w: 80, h: 32, type: 'crystal' },
+      { x: 610, y: 392, w: 110, h: 32, type: 'crystal' },
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 170, h: 40 },
+      { x: 230, y: 465, w: 120, h: 20 },
+      { x: 420, y: 430, w: 110, h: 20 },
+      { x: 620, y: 390, w: 120, h: 20 },
+      { x: 815, y: 350, w: 145, h: 20 },
+      { x: 820, y: 500, w: 140, h: 40 },
+    ],
+    spikes: [
+      { x: 175, y: 500, w: 42, h: 40 },
+      { x: 365, y: 500, w: 45, h: 40 },
+      { x: 545, y: 500, w: 50, h: 40 },
+      { x: 735, y: 500, w: 55, h: 40 },
+    ],
+    movingPlatforms: [
+      { x: 250, y: 345, w: 82, h: 16, axis: 'y', origin: 345, range: 58, speed: 1.7, phase: 0.4 },
+      { x: 535, y: 310, w: 86, h: 16, axis: 'x', origin: 535, range: 86, speed: 1.9, phase: 0.2 },
+    ],
+    bouncePads: [
+      { x: 246, y: 447, w: 38, h: 18, force: 940 },
+      { x: 838, y: 332, w: 38, h: 18, force: 890 },
+    ],
+    dashOrbs: [
+      { x: 288, y: 322, r: 10, active: true, timer: 0 },
+      { x: 575, y: 286, r: 10, active: true, timer: 0 },
+      { x: 855, y: 318, r: 10, active: true, timer: 0 },
+    ],
+    crumblePlatforms: [
+      { x: 450, y: 350, w: 78, h: 16, state: 'solid', timer: 0 },
+      { x: 700, y: 305, w: 76, h: 16, state: 'solid', timer: 0 },
+    ],
+    relics: [
+      { x: 260, y: 435, w: 14, h: 14, collected: false },
+      { x: 570, y: 282, w: 14, h: 14, collected: false },
+      { x: 875, y: 322, w: 14, h: 14, collected: false },
+    ],
+    lever: { x: 838, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemies: [
+      {
+        spawnX: 430,
+        y: 396,
+        w: 34,
+        h: 34,
+        speed: 82,
+        patrolMinX: 420,
+        patrolMaxX: 530,
+        detectionRange: 120,
+        resetRange: 190,
+      },
+      {
+        spawnX: 650,
+        y: 356,
+        w: 34,
+        h: 34,
+        speed: 88,
+        patrolMinX: 620,
+        patrolMaxX: 740,
+        detectionRange: 130,
+        resetRange: 205,
+      },
+    ],
+  },
+,
+  {
+    name: 'Level 5: Furnace Corridor',
+    start: { x: 30, y: 430 },
+    unlockMode: 'relicsOrEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 100, type: 'wall' },
+      { x: 120, y: 136, w: 180, h: 32, type: 'trim' },
+      { x: 520, y: 136, w: 220, h: 32, type: 'wall' },
+      { x: 280, y: 460, w: 90, h: 32, type: 'crystal' }
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 180, h: 40 }, { x: 220, y: 460, w: 130, h: 20 },
+      { x: 420, y: 420, w: 120, h: 20 }, { x: 610, y: 380, w: 120, h: 20 },
+      { x: 810, y: 500, w: 150, h: 40 }
+    ],
+    spikes: [{ x: 185, y: 500, w: 30, h: 40 }, { x: 555, y: 500, w: 42, h: 40 }],
+    movingPlatforms: [{ x: 520, y: 330, w: 88, h: 16, axis: 'y', origin: 330, range: 72, speed: 1.7, phase: 0.3 }],
+    bouncePads: [{ x: 436, y: 402, w: 38, h: 18, force: 960 }],
+    dashOrbs: [{ x: 650, y: 350, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 260, y: 390, w: 80, h: 16, state: 'solid', timer: 0 }],
+    laserBars: [{ x: 690, y: 364, w: 90, h: 8, axis: 'x', range: 55, speed: 2.5, phase: 0.7, active: true }],
+    sawBlades: [{ x: 500, y: 404, r: 13, axis: 'x', range: 48, speed: 2.1, phase: 0.2 }],
+    relics: [{ x: 244, y: 438, w: 14, h: 14, collected: false }, { x: 648, y: 356, w: 14, h: 14, collected: false }],
+    lever: { x: 846, y: 460, w: 18, h: 40, pulled: false, promptRange: 72 },
+    gate: { x: 912, y: 445, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemies: [
+      { spawnX: 430, y: 386, w: 34, h: 34, speed: 86, patrolMinX: 420, patrolMaxX: 540, detectionRange: 130, resetRange: 210 },
+      { spawnX: 626, y: 346, w: 34, h: 34, speed: 90, patrolMinX: 610, patrolMaxX: 730, detectionRange: 136, resetRange: 214 }
+    ],
+  },
+  {
+    name: 'Level 6: Core Vault',
+    start: { x: 34, y: 430 },
+    unlockMode: 'relicsAndEnemies',
+    decorTiles: [
+      { x: 0, y: 0, w: 960, h: 112, type: 'wall' }, { x: 88, y: 140, w: 210, h: 32, type: 'trim' },
+      { x: 620, y: 140, w: 220, h: 32, type: 'wall' }, { x: 420, y: 460, w: 110, h: 32, type: 'crystal' }
+    ],
+    platforms: [
+      { x: 0, y: 500, w: 170, h: 40 }, { x: 220, y: 470, w: 120, h: 20 }, { x: 410, y: 430, w: 120, h: 20 },
+      { x: 610, y: 390, w: 120, h: 20 }, { x: 800, y: 350, w: 160, h: 20 }, { x: 820, y: 500, w: 140, h: 40 }
+    ],
+    spikes: [{ x: 176, y: 500, w: 38, h: 40 }, { x: 365, y: 500, w: 44, h: 40 }, { x: 548, y: 500, w: 48, h: 40 }],
+    movingPlatforms: [{ x: 300, y: 330, w: 86, h: 16, axis: 'y', origin: 330, range: 78, speed: 1.8, phase: 0.2 }, { x: 660, y: 300, w: 86, h: 16, axis: 'x', origin: 660, range: 92, speed: 2.0, phase: 0.6 }],
+    bouncePads: [{ x: 228, y: 452, w: 38, h: 18, force: 980 }, { x: 838, y: 332, w: 38, h: 18, force: 920 }],
+    dashOrbs: [{ x: 328, y: 304, r: 10, active: true, timer: 0 }, { x: 702, y: 286, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 450, y: 350, w: 80, h: 16, state: 'solid', timer: 0 }, { x: 742, y: 305, w: 76, h: 16, state: 'solid', timer: 0 }],
+    laserBars: [{ x: 500, y: 422, w: 96, h: 8, axis: 'x', range: 70, speed: 2.7, phase: 0.9, active: true }, { x: 830, y: 338, w: 86, h: 8, axis: 'y', range: 52, speed: 2.3, phase: 1.3, active: true }],
+    sawBlades: [{ x: 612, y: 372, r: 13, axis: 'x', range: 45, speed: 2.2, phase: 0.8 }, { x: 476, y: 412, r: 14, axis: 'y', range: 26, speed: 2.0, phase: 0.4 }],
+    relics: [{ x: 250, y: 440, w: 14, h: 14, collected: false }, { x: 702, y: 282, w: 14, h: 14, collected: false }, { x: 884, y: 322, w: 14, h: 14, collected: false }],
+    lever: { x: 838, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemies: [
+      { spawnX: 412, y: 396, w: 34, h: 34, speed: 92, patrolMinX: 400, patrolMaxX: 530, detectionRange: 136, resetRange: 215 },
+      { spawnX: 640, y: 356, w: 34, h: 34, speed: 96, patrolMinX: 610, patrolMaxX: 742, detectionRange: 140, resetRange: 220 },
+      { spawnX: 830, y: 316, w: 34, h: 34, speed: 90, patrolMinX: 800, patrolMaxX: 950, detectionRange: 132, resetRange: 210 }
+    ],
+  }
+
 ];
 
 let currentLevelIndex = 0;
@@ -171,6 +518,30 @@ function overlap(a, b) {
     a.y + a.h > b.y;
 }
 
+
+function getUnlockProgress(level) {
+  const totalRelics = (level.relics || []).length;
+  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
+  const activeEnemies = enemies.filter((e) => !e.defeated).length;
+  return { totalRelics, collectedRelics, activeEnemies };
+}
+
+function canUnlockLevel(level) {
+  const { totalRelics, collectedRelics, activeEnemies } = getUnlockProgress(level);
+  const allRelics = collectedRelics >= totalRelics;
+  if (level.unlockMode === 'relicsOrEnemies') return allRelics || activeEnemies === 0;
+  if (level.unlockMode === 'relicsAndEnemies') return allRelics && activeEnemies === 0;
+  return allRelics;
+}
+
+function getUnlockHint(level) {
+  const { totalRelics, collectedRelics, activeEnemies } = getUnlockProgress(level);
+  if (canUnlockLevel(level)) return 'Press E';
+  if (level.unlockMode === 'relicsOrEnemies') return `${collectedRelics}/${totalRelics} relics or defeat enemies`;
+  if (level.unlockMode === 'relicsAndEnemies') return `${collectedRelics}/${totalRelics} relics + ${activeEnemies} enemies`;
+  return `${collectedRelics}/${totalRelics} relics`;
+}
+
 function resetEnemy() {
   const levelEnemies = currentLevel().enemies || [];
   enemies = levelEnemies.map((levelEnemy) => ({
@@ -184,9 +555,11 @@ function resetEnemy() {
     patrolMaxX: levelEnemy.patrolMaxX,
     detectionRange: levelEnemy.detectionRange,
     resetRange: levelEnemy.resetRange,
-    state: 'patrol',
+    state: EnemyStates.Patrol,
     direction: 1,
     defeated: false,
+    animTime: 0,
+    lastState: EnemyStates.Patrol,
   }));
 }
 
@@ -197,11 +570,17 @@ function resetPlayer(position, message) {
   player.vy = 0;
   player.onGround = false;
   player.won = false;
+  player.dashTimer = 0;
+  player.dashCooldown = 0;
+  player.dashCharge = 1;
+  player.animTime = 0;
+  player.animationState = 'idle';
   setStatus(message);
 }
 
 function loadLevel(index, message) {
   currentLevelIndex = index;
+  particles.length = 0;
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
   if (level.lever) level.lever.pulled = false;
@@ -210,6 +589,38 @@ function loadLevel(index, message) {
     level.crumblePlatforms.forEach((p) => {
       p.state = 'solid';
       p.timer = 0;
+    });
+  }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
+  }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
+  }
+  if (level.dashOrbs) {
+    level.dashOrbs.forEach((orb) => {
+      orb.active = true;
+      orb.timer = 0;
     });
   }
   resetEnemy();
@@ -227,6 +638,12 @@ function restartLevel(message = 'Level reset.') {
       p.timer = 0;
     });
   }
+  if (level.dashOrbs) {
+    level.dashOrbs.forEach((orb) => {
+      orb.active = true;
+      orb.timer = 0;
+    });
+  }
   resetEnemy();
   resetPlayer(level.start, `${message} ${level.name}`);
 }
@@ -240,6 +657,16 @@ function updateDynamicFeatures(level, dt, nowMs) {
     for (const mp of level.movingPlatforms) {
       const offset = Math.sin(nowMs / 1000 * mp.speed + mp.phase) * mp.range;
       if (mp.axis === 'x') mp.x = mp.origin + offset;
+      if (mp.axis === 'y') mp.y = mp.origin + offset;
+    }
+  }
+
+  if (level.dashOrbs) {
+    for (const orb of level.dashOrbs) {
+      if (!orb.active) {
+        orb.timer -= dt;
+        if (orb.timer <= 0) orb.active = true;
+      }
     }
   }
 
@@ -263,6 +690,7 @@ function updateDynamicFeatures(level, dt, nowMs) {
 }
 
 function updatePlayerAdvancedMovement(dt) {
+  player.animTime += dt;
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
@@ -289,7 +717,7 @@ function getSolidPlatforms(level) {
 
 function updatePlayer(dt) {
   if (isPressed('KeyR')) {
-    loadLevel(currentLevelIndex, 'Manual reset.');
+    loadLevel(player.won ? 0 : currentLevelIndex, player.won ? 'New run started.' : 'Manual reset.');
     return;
   }
 
@@ -314,7 +742,13 @@ function updatePlayer(dt) {
     player.onGround = false;
     player.coyoteTimer = 0;
     player.jumpBufferTimer = 0;
+    playSound('jump');
+    spawnParticles(player.x + player.w / 2, player.y + player.h, 8, '#8ff7ff', { speed: 55, life: 0.28, size: 3 });
   }
+
+  player.animationState = player.onGround
+    ? (Math.abs(player.vx) > 10 ? 'run' : 'idle')
+    : (player.vy < 0 ? 'jump' : 'fall');
 
   if (dash && player.onGround && player.dashCharge > 0 && player.dashCooldown <= 0) {
     const dashDir = left ? -1 : (right ? 1 : player.facing);
@@ -323,6 +757,9 @@ function updatePlayer(dt) {
     player.dashTimer = 0.08;
     player.dashCooldown = 0.65;
     player.dashCharge -= 1;
+    player.animationState = 'dash';
+    playSound('dash');
+    spawnParticles(player.x + player.w / 2 - player.facing * 16, player.y + player.h / 2, 18, '#8ff7ff', { speed: 120, vx: -player.facing * 80, life: 0.34, size: 5 });
     setStatus('Dash!');
   }
 
@@ -362,6 +799,8 @@ function updatePlayer(dt) {
 
   for (const s of level.spikes) {
     if (overlap(player, s)) {
+      playSound('hazard');
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
       restartLevel('Hit spikes!');
       return;
     }
@@ -374,9 +813,13 @@ function updatePlayer(dt) {
     if (stomped) {
       enemy.defeated = true;
       player.vy = -380;
+      playSound('bounce');
+      spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 18, '#ffd66b', { speed: 110, life: 0.45, size: 4 });
       setStatus('Enemy incapacitated!');
       continue;
     }
+    playSound('hazard');
+    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
     restartLevel('Enemy got you!');
     return;
   }
@@ -386,6 +829,52 @@ function updatePlayer(dt) {
       if (overlap(player, pad) && player.vy >= -120) {
         player.vy = -pad.force;
         player.onGround = false;
+        playSound('bounce');
+        spawnParticles(pad.x + pad.w / 2, pad.y, 16, '#9cff93', { speed: 95, vy: -60, life: 0.36, size: 4 });
+      }
+    }
+  }
+
+
+  if (level.dashOrbs) {
+    for (const orb of level.dashOrbs) {
+      const orbBox = { x: orb.x - orb.r, y: orb.y - orb.r, w: orb.r * 2, h: orb.r * 2 };
+      if (orb.active && overlap(player, orbBox)) {
+        orb.active = false;
+        orb.timer = 2.5;
+        player.dashCharge = 1;
+        player.dashCooldown = 0;
+        player.vy = Math.min(player.vy, -120);
+        playSound('collect');
+        spawnParticles(orb.x, orb.y, 18, '#8ff7ff', { speed: 110, life: 0.42, size: 4 });
+        setStatus('Dash orb refreshed.');
+      }
+    }
+  }
+
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      const hit = { x: (lb.cx ?? lb.x), y: (lb.cy ?? lb.y), w: lb.w, h: lb.h };
+      if (lb.active && overlap(player, hit)) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Laser trap hit!');
+        return;
+      }
+    }
+  }
+
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      const cX = saw.cx ?? saw.x;
+      const cY = saw.cy ?? saw.y;
+      const nearX = Math.abs((player.x + player.w / 2) - cX) < (saw.r + player.w * 0.45);
+      const nearY = Math.abs((player.y + player.h / 2) - cY) < (saw.r + player.h * 0.45);
+      if (nearX && nearY) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Saw trap hit!');
+        return;
       }
     }
   }
@@ -404,13 +893,13 @@ function updatePlayer(dt) {
     };
 
     if (overlap(player, leverZone) && !level.lever.pulled && isPressed('KeyE')) {
-      const totalRelics = level.relics ? level.relics.length : 0;
-      const collectedRelics = level.relics ? level.relics.filter((r) => r.collected).length : 0;
-      if (collectedRelics < totalRelics) {
-        setStatus(`Need more relics (${collectedRelics}/${totalRelics}) before pulling joystick.`);
+      if (!canUnlockLevel(level)) {
+        setStatus(`Unlock route: ${getUnlockHint(level)}.`);
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
+        playSound('unlock');
+        spawnParticles(level.gate.x + level.gate.w / 2, level.gate.y + level.gate.h / 2, 30, '#65df95', { speed: 135, life: 0.7, size: 5 });
         setStatus('Joystick pulled! Gate unlocked.');
       }
     }
@@ -420,6 +909,8 @@ function updatePlayer(dt) {
     for (const relic of level.relics) {
       if (!relic.collected && overlap(player, relic)) {
         relic.collected = true;
+        playSound('collect');
+        spawnParticles(relic.x + relic.w / 2, relic.y + relic.h / 2, 14, '#ffd66b', { speed: 90, life: 0.42, size: 4 });
         const total = level.relics.length;
         const got = level.relics.filter((r) => r.collected).length;
         setStatus(`Relic collected (${got}/${total}).`);
@@ -429,21 +920,80 @@ function updatePlayer(dt) {
 
   if (overlap(player, level.gate)) {
     if (level.gate.locked) {
-      setStatus('Gate locked. Pull the joystick lever with E.');
+      setStatus(`Gate locked. ${getUnlockHint(level)}, then pull the joystick.`);
       player.x = prevX;
       return;
     }
 
     if (level.gate.type === 'next') {
-      loadLevel(currentLevelIndex + 1, 'Level complete! Welcome to Level 2. Pull the lever to unlock the gate.');
+      const nextLevel = levels[currentLevelIndex + 1];
+      loadLevel(currentLevelIndex + 1, `Level complete! ${nextLevel.name}. Find an unlock route.`);
       return;
     }
 
     if (level.gate.type === 'finish') {
       player.won = true;
-      setStatus('You cleared both levels! Press R to replay from this level.');
+      setStatus('You cleared all levels! Press R to start a new run.');
     }
   }
+}
+
+function getEnemyTransition(enemy, distanceToPlayer) {
+  if (enemy.state === EnemyStates.Patrol && distanceToPlayer < enemy.detectionRange) {
+    return EnemyStates.Alert;
+  }
+
+  if (enemy.state === EnemyStates.Alert && distanceToPlayer > enemy.resetRange) {
+    return EnemyStates.Reset;
+  }
+
+  if (enemy.state === EnemyStates.Reset && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
+    return EnemyStates.Patrol;
+  }
+
+  return enemy.state;
+}
+
+function enterEnemyState(enemy, nextState) {
+  if (enemy.state === nextState) return;
+
+  const previousState = enemy.state;
+  enemy.lastState = previousState;
+  enemy.state = nextState;
+
+  if (nextState === EnemyStates.Patrol) {
+    enemy.direction = 1;
+  }
+
+  if (nextState === EnemyStates.Alert) {
+    playSound('alert');
+    spawnParticles(enemy.x + enemy.w / 2, enemy.y + 2, 8, '#ff6b6b', { speed: 70, life: 0.3, size: 3 });
+  }
+}
+
+function updateEnemyPatrol(enemy, dt) {
+  enemy.vx = enemy.speed * enemy.direction;
+  enemy.x += enemy.vx * dt;
+
+  if (enemy.x <= enemy.patrolMinX) {
+    enemy.x = enemy.patrolMinX;
+    enemy.direction = 1;
+  } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
+    enemy.x = enemy.patrolMaxX - enemy.w;
+    enemy.direction = -1;
+  }
+}
+
+function updateEnemyAlert(enemy, dt, playerCenterX, enemyCenterX) {
+  enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.35 : enemy.speed * 1.35;
+  enemy.x += enemy.vx * dt;
+  enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
+}
+
+function updateEnemyReset(enemy, dt) {
+  enemy.vx = -enemy.speed;
+  enemy.x += enemy.vx * dt;
+  if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
 }
 
 function updateEnemy(dt) {
@@ -452,39 +1002,65 @@ function updateEnemy(dt) {
   const playerCenterX = player.x + player.w / 2;
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
+    enemy.animTime += dt;
+
     const enemyCenterX = enemy.x + enemy.w / 2;
-    const dist = Math.abs(playerCenterX - enemyCenterX);
+    const distanceToPlayer = Math.abs(playerCenterX - enemyCenterX);
+    enterEnemyState(enemy, getEnemyTransition(enemy, distanceToPlayer));
 
-    if (enemy.state === 'patrol' && dist < enemy.detectionRange) {
-      enemy.state = 'alert';
-    } else if (enemy.state === 'alert' && dist > enemy.resetRange) {
-      enemy.state = 'reset';
-    } else if (enemy.state === 'reset' && Math.abs(enemy.x - enemy.patrolMinX) < 4) {
-      enemy.state = 'patrol';
-      enemy.direction = 1;
-    }
-
-    if (enemy.state === 'patrol') {
-      enemy.vx = enemy.speed * enemy.direction;
-      enemy.x += enemy.vx * dt;
-
-      if (enemy.x <= enemy.patrolMinX) {
-        enemy.x = enemy.patrolMinX;
-        enemy.direction = 1;
-      } else if (enemy.x + enemy.w >= enemy.patrolMaxX) {
-        enemy.x = enemy.patrolMaxX - enemy.w;
-        enemy.direction = -1;
-      }
-    } else if (enemy.state === 'alert') {
-      enemy.vx = playerCenterX < enemyCenterX ? -enemy.speed * 1.35 : enemy.speed * 1.35;
-      enemy.x += enemy.vx * dt;
-      enemy.x = Math.max(enemy.patrolMinX, Math.min(enemy.patrolMaxX - enemy.w, enemy.x));
-    } else if (enemy.state === 'reset') {
-      enemy.vx = -enemy.speed;
-      enemy.x += enemy.vx * dt;
-      if (enemy.x < enemy.patrolMinX) enemy.x = enemy.patrolMinX;
+    if (enemy.state === EnemyStates.Patrol) {
+      updateEnemyPatrol(enemy, dt);
+    } else if (enemy.state === EnemyStates.Alert) {
+      updateEnemyAlert(enemy, dt, playerCenterX, enemyCenterX);
+    } else if (enemy.state === EnemyStates.Reset) {
+      updateEnemyReset(enemy, dt);
     }
   }
+}
+
+
+function drawDecorTilemap(level) {
+  for (const tile of level.decorTiles || []) {
+    if (tile.type === 'wall') {
+      ctx.fillStyle = material.wallPattern || '#202a44';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+      ctx.strokeStyle = 'rgba(143, 247, 255, 0.08)';
+      ctx.strokeRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'trim') {
+      ctx.fillStyle = material.trimPattern || '#293554';
+      ctx.fillRect(tile.x, tile.y, tile.w, tile.h);
+    } else if (tile.type === 'crystal') {
+      const crystalCount = Math.max(3, Math.floor(tile.w / 20));
+      for (let i = 0; i < crystalCount; i++) {
+        const x = tile.x + i * 18 + 4;
+        const h = 12 + (i % 3) * 7;
+        const y = tile.y + tile.h - h;
+        const grad = ctx.createLinearGradient(x, y, x, y + h);
+        grad.addColorStop(0, '#c6fbff');
+        grad.addColorStop(1, '#3fa3c6');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x + 6, y);
+        ctx.lineTo(x + 12, y + h);
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function drawAmbientVfx(nowMs) {
+  const time = nowMs / 1000;
+  ctx.save();
+  for (let i = 0; i < 28; i++) {
+    const x = (i * 73 + Math.sin(time * 0.6 + i) * 18) % world.width;
+    const y = 70 + ((i * 43 + time * 18) % 360);
+    const alpha = 0.12 + Math.sin(time * 1.7 + i) * 0.05;
+    ctx.fillStyle = `rgba(143, 247, 255, ${alpha})`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.restore();
 }
 
 function drawPlatforms(platforms) {
@@ -525,6 +1101,79 @@ function drawBouncePads(bouncePads) {
   }
 }
 
+
+
+function hash2D(x, y) {
+  const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+function shaderPulse(uvx, uvy, time, speed, density) {
+  const flowX = uvx + time * speed;
+  const flowY = uvy + Math.sin(time * 0.7 + uvx * 6.0) * 0.15;
+  const cell = hash2D(Math.floor(flowX * density), Math.floor(flowY * density));
+  const edge = 1 - Math.abs(((flowX * density) % 1) - 0.5) * 2;
+  return Math.max(0, cell * edge);
+}
+
+function drawDashOrbs(orbs) {
+  const time = performance.now() / 1000;
+  for (const orb of orbs || []) {
+    const alpha = orb.active ? 1 : 0.25;
+    const pulse = Math.sin(time * 7 + orb.x * 0.01) * 2;
+    const shaderMask = shaderPulse(orb.x / world.width, orb.y / world.height, time, 0.45, 9);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = `rgba(143, 247, 255, ${0.45 + shaderMask * 0.55})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, orb.r + pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(216, 251, 255, ${0.55 + shaderMask * 0.45})`;
+    ctx.beginPath();
+    ctx.arc(orb.x, orb.y, Math.max(3, orb.r - 4 + pulse * 0.4), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawLaserBars(laserBars) {
+  const t = performance.now() / 1000;
+  for (const lb of laserBars || []) {
+    const x = lb.cx ?? lb.x; const y = lb.cy ?? lb.y;
+    ctx.globalAlpha = lb.active ? 0.9 : 0.25;
+    ctx.fillStyle = lb.active ? '#ff5f7a' : '#8a4857';
+    ctx.fillRect(x, y, lb.w, lb.h);
+    if (lb.active) {
+      ctx.fillStyle = `rgba(255,200,210,${0.25 + Math.sin(t*14)*0.1})`;
+      ctx.fillRect(x, y - 2, lb.w, lb.h + 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawSawBlades(sawBlades) {
+  const t = performance.now() / 1000;
+  for (const saw of sawBlades || []) {
+    const cx = saw.cx ?? saw.x; const cy = saw.cy ?? saw.y;
+    const teeth = 10;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t * saw.speed);
+    ctx.fillStyle = '#cfd8e6';
+    ctx.beginPath();
+    for (let i = 0; i < teeth * 2; i++) {
+      const a = (Math.PI * 2 * i) / (teeth * 2);
+      const r = i % 2 === 0 ? saw.r : saw.r * 0.62;
+      const x = Math.cos(a) * r; const y = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5e6a7d'; ctx.beginPath(); ctx.arc(0,0,saw.r*0.28,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
 function drawRelics(relics) {
   for (const relic of relics || []) {
     if (relic.collected) continue;
@@ -540,10 +1189,14 @@ function drawRelics(relics) {
 }
 
 function drawGate(gate) {
+  const time = performance.now() / 1000;
   const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
+  const shaderEnergy = shaderPulse(gate.x / world.width, gate.y / world.height, time, 0.3, 7);
   gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
   gateGradient.addColorStop(1, gate.locked ? '#5b4f40' : '#2e9d62');
   ctx.fillStyle = gateGradient;
+  ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
+  ctx.fillStyle = `rgba(143, 247, 255, ${gate.locked ? 0.06 : 0.12 + shaderEnergy * 0.25})`;
   ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
   ctx.fillStyle = '#2f2f2f';
   ctx.fillRect(gate.x + 5, gate.y + 8, gate.w - 10, gate.h - 16);
@@ -579,40 +1232,119 @@ function drawLever(lever) {
 }
 
 function drawPlayer() {
-  const bob = Math.sin(performance.now() / 100) * 1.1;
+  const time = performance.now() / 1000;
+  const state = player.dashTimer > 0 ? 'dash' : player.animationState;
+  const isRunning = state === 'run';
+  const bob = Math.sin(time * (isRunning ? 13 : 4)) * (isRunning ? 2.2 : 0.8);
   const px = player.x;
   const py = player.y + bob;
-  const armor = ctx.createLinearGradient(px, py, px, py + player.h);
-  armor.addColorStop(0, '#83ecff');
-  armor.addColorStop(1, '#2d87bf');
+  const cx = px + player.w / 2;
+  const facing = player.facing;
+  const runCycle = Math.sin(time * 14) * (isRunning ? 1 : 0.18);
+  const armSwing = runCycle * 5;
+  const legSwing = runCycle * 5;
+  const squash = state === 'fall' ? 1.05 : (state === 'jump' ? 0.96 : 1);
 
-  // body
-  ctx.fillStyle = armor;
-  ctx.fillRect(px, py + 10, player.w, player.h - 10);
-  // head
-  ctx.fillStyle = '#d8fbff';
-  ctx.fillRect(px + 4, py, player.w - 8, 14);
-  // visor/eyes
-  ctx.fillStyle = '#10344a';
-  const eyeX = player.facing > 0 ? px + player.w - 14 : px + 6;
-  ctx.fillRect(eyeX, py + 4, 8, 4);
-  // scarf accent
-  ctx.fillStyle = '#ff8a5b';
-  ctx.fillRect(px + (player.facing > 0 ? 2 : player.w - 8), py + 16, 6, 8);
-  // legs animation
-  const walk = Math.sin(performance.now() / 70) * 3 * (Math.abs(player.vx) > 10 ? 1 : 0.2);
-  ctx.fillStyle = '#1e5f85';
-  ctx.fillRect(px + 5, py + player.h - 8 + walk * 0.2, 6, 8);
-  ctx.fillRect(px + player.w - 11, py + player.h - 8 - walk * 0.2, 6, 8);
-  // dash trail
-  if (player.dashTimer > 0) {
-    ctx.fillStyle = 'rgba(130, 245, 255, 0.4)';
-    ctx.fillRect(px - player.facing * 10, py + 8, player.w, player.h - 8);
+  ctx.save();
+  ctx.translate(cx, py + player.h / 2);
+  ctx.scale(facing, squash);
+  ctx.translate(-player.w / 2, -player.h / 2);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.beginPath();
+  ctx.ellipse(player.w / 2, player.h + 4, 18, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (state === 'dash') {
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(130, 245, 255, ${0.24 - i * 0.045})`;
+      ctx.fillRect(-12 - i * 9, 9 + i, player.w - i * 2, player.h - 13 - i * 2);
+    }
   }
-  // outline
+
+  // scarf and backpack sell the character as a more complex model.
+  ctx.strokeStyle = '#ff8a5b';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 17);
+  ctx.quadraticCurveTo(-8, 15 + Math.sin(time * 8) * 3, -18, 24 + Math.cos(time * 5) * 4);
+  ctx.stroke();
+  ctx.fillStyle = '#24455f';
+  ctx.fillRect(2, 16, 7, 18);
+  ctx.fillStyle = '#75e7ff';
+  ctx.fillRect(4, 19, 3, 9);
+
+  // legs with independent feet.
+  ctx.fillStyle = '#1e5f85';
+  ctx.fillRect(8, 30 + legSwing * 0.25, 6, 11);
+  ctx.fillRect(18, 30 - legSwing * 0.25, 6, 11);
+  ctx.fillStyle = '#143b55';
+  ctx.fillRect(6 + Math.max(0, -legSwing) * 0.2, 39, 10, 4);
+  ctx.fillRect(17 + Math.max(0, legSwing) * 0.2, 39, 10, 4);
+
+  // arms sit behind and in front of the torso, giving depth.
+  ctx.strokeStyle = '#2d87bf';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(7, 18);
+  ctx.lineTo(3, 26 - armSwing);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(24, 18);
+  ctx.lineTo(28, 26 + armSwing);
+  ctx.stroke();
+  ctx.fillStyle = '#d8fbff';
+  ctx.beginPath();
+  ctx.arc(3, 27 - armSwing, 2.8, 0, Math.PI * 2);
+  ctx.arc(28, 27 + armSwing, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  const armor = ctx.createLinearGradient(0, 8, 0, player.h);
+  armor.addColorStop(0, '#9af3ff');
+  armor.addColorStop(0.55, '#2d87bf');
+  armor.addColorStop(1, '#1b5f91');
+  ctx.fillStyle = armor;
+  ctx.fillRect(5, 12, player.w - 10, 23);
+  ctx.fillStyle = '#d8fbff';
+  ctx.fillRect(7, 1, player.w - 14, 15);
+  ctx.fillStyle = '#c4f7ff';
+  ctx.fillRect(10, -2, player.w - 20, 5);
+  ctx.fillStyle = '#10344a';
+  ctx.fillRect(15, 5, 11, 5);
+  ctx.fillStyle = '#ffffffaa';
+  ctx.fillRect(17, 6, 4, 1.5);
+
+  // chest plate, belt, shoulder pads, knee guards, and boot jets add visible model complexity.
+  ctx.fillStyle = '#b8f7ff';
+  ctx.fillRect(10, 16, 10, 8);
+  ctx.fillStyle = '#ffcf69';
+  ctx.fillRect(14, 18, 3, 3);
+  ctx.fillStyle = '#0f1b2a';
+  ctx.fillRect(7, 27, player.w - 14, 3);
+  ctx.fillStyle = '#71dfff';
+  ctx.fillRect(3, 13, 7, 5);
+  ctx.fillRect(player.w - 10, 13, 7, 5);
+  ctx.fillStyle = '#19486a';
+  ctx.fillRect(8, 35, 5, 4);
+  ctx.fillRect(17, 35, 5, 4);
+
+  if (!player.onGround || state === 'dash') {
+    ctx.fillStyle = state === 'dash' ? '#fff3a3' : '#8ff7ff';
+    ctx.beginPath();
+    ctx.moveTo(9, 43);
+    ctx.lineTo(12, 50 + Math.sin(time * 32) * 3);
+    ctx.lineTo(15, 43);
+    ctx.moveTo(19, 43);
+    ctx.lineTo(22, 50 + Math.cos(time * 29) * 3);
+    ctx.lineTo(25, 43);
+    ctx.fill();
+  }
+
   ctx.strokeStyle = '#0f1b2a';
   ctx.lineWidth = 2;
-  ctx.strokeRect(px, py, player.w, player.h);
+  ctx.strokeRect(5, 12, player.w - 10, 23);
+  ctx.strokeRect(7, 1, player.w - 14, 15);
+  ctx.restore();
 }
 
 function drawEnemy() {
@@ -625,60 +1357,93 @@ function drawEnemy() {
       defeated: '#6f7688',
     };
     const stateColor = enemy.defeated ? colors.defeated : colors[enemy.state];
-    const pulse = 1 + Math.sin(performance.now() / 180) * 0.05;
-    const gradient = ctx.createRadialGradient(
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      4,
-      enemy.x + enemy.w / 2,
-      enemy.y + enemy.h / 2,
-      enemy.w / 2
-    );
+    const time = performance.now() / 1000 + enemy.x * 0.01;
+    const pulse = 1 + Math.sin(time * (enemy.state === 'alert' ? 9 : 5)) * 0.07;
+    const legStride = Math.sin(time * 12) * (enemy.state === 'alert' ? 4 : 2);
+    const cx = enemy.x + enemy.w / 2;
+    const cy = enemy.y + enemy.h / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.beginPath();
+    ctx.ellipse(cx, enemy.y + enemy.h + 4, enemy.w / 2, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Animated legs and feet make the patrol/chase state easier to read.
+    ctx.strokeStyle = '#2d1b1b';
+    ctx.lineWidth = 4;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + side * 7, enemy.y + enemy.h - 6);
+      ctx.lineTo(cx + side * (8 + legStride), enemy.y + enemy.h + 5);
+      ctx.stroke();
+      ctx.fillStyle = '#2d1b1b';
+      ctx.fillRect(cx + side * (8 + legStride) - 4, enemy.y + enemy.h + 4, 8, 3);
+    }
+
+    const gradient = ctx.createRadialGradient(cx - 5, cy - 7, 4, cx, cy, enemy.w / 2 + 8);
     gradient.addColorStop(0, '#fff8');
-    gradient.addColorStop(1, stateColor);
+    gradient.addColorStop(0.55, stateColor);
+    gradient.addColorStop(1, '#3b2230');
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    ctx.ellipse(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2 + 2, (enemy.w / 2) * pulse, (enemy.h / 2) * pulse, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + 2, (enemy.w / 2) * pulse, (enemy.h / 2 + 4) * pulse, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#1b1f2e';
+    // Horns/antennae, armor ring, eyes, and jaw add monster model detail.
+    ctx.strokeStyle = stateColor;
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(enemy.x + 12, enemy.y + 14, 3, 0, Math.PI * 2);
-    ctx.arc(enemy.x + enemy.w - 12, enemy.y + 14, 3, 0, Math.PI * 2);
+    ctx.moveTo(cx - 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx - 18, enemy.y - 10, cx - 5, enemy.y - 3);
+    ctx.moveTo(cx + 9, enemy.y + 7);
+    ctx.quadraticCurveTo(cx + 18, enemy.y - 10, cx + 5, enemy.y - 3);
+    ctx.stroke();
+    ctx.strokeStyle = '#1b1f2e';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy + 2, enemy.w / 2 - 2, 0.2, Math.PI * 1.8);
+    ctx.stroke();
+
+    ctx.fillStyle = enemy.state === 'alert' ? '#2d1b1b' : '#1b1f2e';
+    ctx.beginPath();
+    ctx.ellipse(enemy.x + 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(enemy.x + enemy.w - 11, enemy.y + 14, enemy.state === 'alert' ? 4 : 3, 3, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = '#ffffffaa';
+    ctx.fillRect(enemy.x + 10, enemy.y + 12, 2, 1.5);
+    ctx.fillRect(enemy.x + enemy.w - 12, enemy.y + 12, 2, 1.5);
 
-    const mouthWidth = enemy.state === 'alert' ? 14 : 9;
-    const mouthY = enemy.y + enemy.h - 10 + Math.sin(performance.now() / 220) * 1.2;
+    const mouthWidth = enemy.state === 'alert' ? 16 : 10;
+    const mouthY = enemy.y + enemy.h - 10 + Math.sin(time * 7) * 1.4;
     ctx.fillStyle = '#2d1b1b';
-    ctx.fillRect(enemy.x + enemy.w / 2 - mouthWidth / 2, mouthY, mouthWidth, 3);
-
+    ctx.fillRect(cx - mouthWidth / 2, mouthY, mouthWidth, 3);
     if (enemy.state === 'alert' && !enemy.defeated) {
       ctx.fillStyle = '#ffd2d2';
-      ctx.fillRect(enemy.x + 5, enemy.y - 4, 4, 6);
-      ctx.fillRect(enemy.x + enemy.w - 9, enemy.y - 4, 4, 6);
+      ctx.fillRect(cx - 6, mouthY + 3, 3, 5);
+      ctx.fillRect(cx + 3, mouthY + 3, 3, 5);
     }
+
+    ctx.restore();
   }
 }
 
-function drawUI(level) {
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '16px sans-serif';
-  ctx.fillText(level.name, 16, 24);
-  const activeEnemies = enemies.filter((e) => !e.defeated).length;
-  const firstActive = enemies.find((e) => !e.defeated);
-  const enemyStateText = firstActive ? firstActive.state.toUpperCase() : 'DEFEATED';
-  ctx.fillText(`Enemy state: ${enemyStateText} | Active: ${activeEnemies}`, 16, 46);
-  const totalRelics = (level.relics || []).length;
-  const collectedRelics = (level.relics || []).filter((r) => r.collected).length;
-  ctx.fillText(`Relics: ${collectedRelics}/${totalRelics}`, 16, 68);
-  ctx.fillText(`Dash: ${player.dashCharge > 0 ? 'READY (Shift)' : 'RECHARGING'}`, 16, 90);
-  ctx.fillText('Controls: A/D or ←/→ move, Space jump (buffered), Shift dash, E interact, R reset', 16, 112);
-
+function drawTutorialGuides(level) {
   if (level.lever && !level.lever.pulled) {
     const nearLever = Math.abs((player.x + player.w / 2) - (level.lever.x + level.lever.w / 2)) < level.lever.promptRange;
     if (nearLever) {
+      const prompt = getUnlockHint(level);
+      ctx.save();
+      ctx.font = '14px sans-serif';
+      const promptWidth = ctx.measureText(prompt).width + 20;
+      const promptX = Math.max(8, Math.min(world.width - promptWidth - 8, level.lever.x - promptWidth / 2));
+      ctx.fillStyle = 'rgba(12, 17, 29, 0.72)';
+      ctx.fillRect(promptX, level.lever.y - 34, promptWidth, 24);
+      ctx.strokeStyle = '#ffe790';
+      ctx.strokeRect(promptX, level.lever.y - 34, promptWidth, 24);
       ctx.fillStyle = '#ffe790';
-      ctx.fillText('Press E to pull joystick (all relics required)', level.lever.x - 84, level.lever.y - 10);
+      ctx.fillText(prompt, promptX + 10, level.lever.y - 17);
+      ctx.restore();
     }
   }
 }
@@ -693,16 +1458,22 @@ function draw() {
   for (let i = 0; i < 12; i++) {
     ctx.fillRect(i * 90, 0, 45, canvas.height);
   }
+  drawDecorTilemap(level);
+  drawAmbientVfx(performance.now());
 
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
   drawBouncePads(level.bouncePads);
+  drawLaserBars(level.laserBars);
+  drawSawBlades(level.sawBlades);
+  drawDashOrbs(level.dashOrbs);
   drawRelics(level.relics);
   drawLever(level.lever);
   drawGate(level.gate);
   drawEnemy();
   drawPlayer();
-  drawUI(level);
+  drawParticles();
+  drawTutorialGuides(level);
 }
 
 let lastTime = performance.now();
@@ -713,6 +1484,7 @@ function loop(now) {
   updateDynamicFeatures(currentLevel(), dt, now);
   updatePlayer(dt);
   updateEnemy(dt);
+  updateParticles(dt);
   draw();
 
   keysPressed.clear();
@@ -720,5 +1492,5 @@ function loop(now) {
 }
 
 buildMaterials();
-loadLevel(0, 'Level 1 started. Pull the joystick to open the first gate.');
+loadLevel(0, 'Level 1 started. Complete objectives, pull joystick, clear 6 levels.');
 requestAnimationFrame(loop);
