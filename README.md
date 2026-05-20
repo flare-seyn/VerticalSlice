@@ -14,14 +14,11 @@ This repository now includes a playable Milestone 1 web prototype with the requi
 - Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, and collectible relic objectives.
 - Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
 
-## Run Locally
-Because this is plain HTML/CSS/JS, you can run it with a static server:
 
-```bash
-python3 -m http.server 8000
-```
+Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
 
-Then open: `http://localhost:8000`
+## State Machine (MS1) — detailed implementation
+The enemy state machine is the main Milestone 1 state machine and it is still active in every level. It is implemented in `game.js` with explicit `EnemyStates`, transition evaluation in `getEnemyTransition()`, state-entry side effects in `enterEnemyState()`, and per-state actions in `updateEnemyPatrol()`, `updateEnemyAlert()`, and `updateEnemyReset()`.
 
 ## Controls
 - `A` / `D` or `Left` / `Right Arrow`: Move
