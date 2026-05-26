@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="560" viewBox="0 0 980 560" role="img" aria-labelledby="title desc">
+<title id="title">Milestone 3 Shader Graph</title>
+<desc id="desc">Pseudo Shader Graph for gate and dash orb energy effect using UV flow, noise, sine distortion, and emissive tint.</desc>
+<rect width="980" height="560" rx="24" fill="#111827"/>
+<text x="34" y="46" fill="#f8fafc" font-family="Inter, Arial" font-size="30" font-weight="700">Shader Graph: Gate + Dash Orb Energy Flow</text>
+<text x="34" y="76" fill="#cbd5e1" font-family="Inter, Arial" font-size="16">Used in game.js shaderPulse() to mimic UV flow + noise mask + emissive blend.</text>
+<g font-family="Inter, Arial" font-size="16">
+<rect x="60" y="170" width="150" height="90" rx="14" fill="#243047" stroke="#8ff7ff"/><text x="88" y="215" fill="#fff">UV</text>
+<rect x="250" y="170" width="160" height="90" rx="14" fill="#243047" stroke="#8ff7ff"/><text x="285" y="210" fill="#fff">Tiling/Offset</text><text x="285" y="232" fill="#cbd5e1">Time * Speed</text>
+<rect x="450" y="170" width="160" height="90" rx="14" fill="#243047" stroke="#8ff7ff"/><text x="505" y="210" fill="#fff">Simple Noise</text>
+<rect x="650" y="170" width="160" height="90" rx="14" fill="#243047" stroke="#8ff7ff"/><text x="700" y="210" fill="#fff">Sine Warp</text>
+<rect x="650" y="320" width="170" height="90" rx="14" fill="#243047" stroke="#8ff7ff"/><text x="688" y="360" fill="#fff">Multiply/Clamp</text>
+<rect x="860" y="245" width="90" height="90" rx="14" fill="#1f3f36" stroke="#65df95"/><text x="878" y="292" fill="#fff">Base+</text><text x="878" y="312" fill="#fff">Emissive</text>
+</g>
+<g stroke="#8ff7ff" stroke-width="4" fill="none">
+<path d="M210 215 L250 215"/><path d="M410 215 L450 215"/><path d="M610 215 L650 215"/><path d="M730 260 L730 320"/><path d="M820 365 L860 290"/>
+</g>
+<text x="56" y="472" fill="#cbd5e1" font-family="Inter, Arial" font-size="15">Where to see it: gate panel glow and dash-orb ring intensity in all levels, strongest when gates unlock and orbs pulse.</text>
+</svg>
