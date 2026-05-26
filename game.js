@@ -625,6 +625,10 @@ function getSolidPlatforms(level) {
   return [...staticPlatforms, ...movingPlatforms, ...crumblePlatforms];
 }
 
+function horizontalOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x;
+}
+
 function updatePlayer(dt) {
   if (isPressed('KeyR')) {
     loadLevel(player.won ? 0 : currentLevelIndex, player.won ? 'New run started.' : 'Manual reset.');
@@ -680,18 +684,28 @@ function updatePlayer(dt) {
   const prevY = player.y;
 
   player.x += player.vx * dt;
-  player.y += player.vy * dt;
-
   player.x = Math.max(0, Math.min(world.width - player.w, player.x));
+  const solids = getSolidPlatforms(level);
+  for (const p of solids) {
+    if (!overlap(player, p)) continue;
+    player.x = prevX;
+    break;
+  }
+
+  player.y += player.vy * dt;
   player.onGround = false;
 
-  for (const p of getSolidPlatforms(level)) {
+  for (const p of solids) {
     if (!overlap(player, p)) continue;
 
-    const cameFromAbove = prevY + player.h <= p.y;
-    const cameFromBelow = prevY >= p.y + p.h;
+    const prevBottom = prevY + player.h;
+    const prevTop = prevY;
+    const currBottom = player.y + player.h;
+    const currTop = player.y;
+    const landingFromAbove = prevBottom <= p.y + 2 && currBottom >= p.y;
+    const hitFromBelow = prevTop >= p.y + p.h - 2 && currTop <= p.y + p.h;
 
-    if (cameFromAbove) {
+    if (landingFromAbove && player.vy >= 0) {
       player.y = p.y - player.h;
       player.vy = 0;
       player.onGround = true;
@@ -699,11 +713,19 @@ function updatePlayer(dt) {
         p.state = 'breaking';
         p.timer = 0.45;
       }
-    } else if (cameFromBelow) {
+    } else if (hitFromBelow && player.vy < 0) {
       player.y = p.y + p.h;
-      player.vy = Math.max(0, player.vy);
+      player.vy = 0;
     } else {
-      player.x = prevX;
+      // Fallback resolves deep overlaps deterministically.
+      if (Math.abs(prevBottom - p.y) < Math.abs(prevTop - (p.y + p.h))) {
+        player.y = p.y - player.h;
+        if (player.vy > 0) player.vy = 0;
+        player.onGround = true;
+      } else {
+        player.y = p.y + p.h;
+        if (player.vy < 0) player.vy = 0;
+      }
     }
   }
 
@@ -719,7 +741,12 @@ function updatePlayer(dt) {
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
     if (!overlap(player, enemy)) continue;
-    const stomped = player.vy > 130 && (player.y + player.h - enemy.y) < 16;
+    const prevBottom = prevY + player.h;
+    const enemyTop = enemy.y;
+    const isFalling = player.vy > 90;
+    const crossedEnemyTop = prevBottom <= enemyTop + 8 && player.y + player.h >= enemyTop;
+    const centeredOnEnemy = horizontalOverlap(player, enemy);
+    const stomped = isFalling && crossedEnemyTop && centeredOnEnemy;
     if (stomped) {
       enemy.defeated = true;
       player.vy = -380;

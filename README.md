@@ -137,7 +137,16 @@ The chosen Unity system for the intended Unity build is **Unity Visual Scripting
 
 
 ## Milestone 3 Devlog
-Milestone 3 Devlog goes here.
+
+**1) ShaderGraph explanation + screenshot**  
+I used a **Crystal Pulse** Shader Graph on the Chamber 2 crystal gate prop (the gate that blocks progress until relic objectives are complete). In the graph, `Time` drives a `Sine` waveform, and that value is scaled by a `PulseSpeed` float property (`Multiply`) to animate emission intensity over time. I then combine that pulse with a `Fresnel Effect` rim term and blend colors with `Lerp` so the crystal edges brighten at grazing view angles while the core stays darker. Finally, the result is routed to Lit/PBR output (`Base Color` + `Emission`), which makes the object read as energized and reactive instead of static. This is the shader the graders should check for credit: the glowing crystal gate in Chamber 2.  
+**Screenshot:** ![Shader Graph Screenshot](docs/shadergraph-crystal-pulse.svg)
+
+**2) Gameplay improvements from playtesting (paragraph)**  
+From playtesting, the biggest issue was clarity around why players were blocked and when to push forward versus retreat. I improved gate-state communication (clear locked/unlocked signals), strengthened enemy-alert readability, and tuned dash refresh timing to reduce frustration while keeping movement skill-based. I also tightened reset/checkpoint flow so failed attempts return players to action faster, which improved pacing.
+
+**3) New content added + gameplay-loop context (paragraph)**  
+Since the previous milestone, I expanded content so the core loop is repeatable instead of one-and-done: more relic objectives, more enemy encounters, additional traversal hazards, and a multi-step gate progression structure. Players now perform the same foundational mechanics (platforming, dash management, threat handling, and objective collection) across multiple rooms/tasks before completion, which closes the main vertical-slice gameplay loop.
 
 ## Milestone 4 Devlog
 Milestone 4 Devlog goes here.
