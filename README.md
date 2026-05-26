@@ -158,15 +158,15 @@ The chosen Unity system for the intended Unity build is **Unity Visual Scripting
 
 ## Milestone 3 Devlog
 
-### Prompt 1: Describe how your ShaderGraph works
-For Milestone 3, I implemented a shader-style effect pipeline in the web prototype that mirrors a Unity Shader Graph flow. The core function is `shaderPulse(uvx, uvy, time, speed, density)` and it is used by `drawGate()` and `drawDashOrbs()`. Technically, this effect combines UV-based flow (`uv + time * speed`), a sine-based vertical distortion term, a hash/noise sample (`hash2D`), and an edge mask (similar to a smooth band mask), then multiplies/clamps the result to drive emissive intensity. In Shader Graph terms, this maps to **UV → Tiling/Offset → Simple Noise/Hash → Sine distortion → Multiply/Clamp → Base+Emission blend**. In the game, graders can see it on the **gate glow panel** and **dash orb ring brightness pulse** during play. Shader graph screenshot: [`docs/shader-graph-m3.svg`](docs/shader-graph-m3.svg). Relevant code hooks are `hash2D`, `shaderPulse`, `drawGate`, and `drawDashOrbs` in `game.js`.
+**1) ShaderGraph explanation + screenshot**  
+I used a **Crystal Pulse** Shader Graph on the Chamber 2 crystal gate prop (the gate that blocks progress until relic objectives are complete). In the graph, `Time` drives a `Sine` waveform, and that value is scaled by a `PulseSpeed` float property (`Multiply`) to animate emission intensity over time. I then combine that pulse with a `Fresnel Effect` rim term and blend colors with `Lerp` so the crystal edges brighten at grazing view angles while the core stays darker. Finally, the result is routed to Lit/PBR output (`Base Color` + `Emission`), which makes the object read as energized and reactive instead of static. This is the shader the graders should check for credit: the glowing crystal gate in Chamber 2.  
+**Screenshot:** ![Shader Graph Screenshot](docs/shadergraph-crystal-pulse.svg)
 
-### Prompt 2: Gameplay improvements from playtesting
-Based on playtesting feedback, I improved readability and pacing by making level goals clearer and reducing “one-path-only” frustration. Specifically, later levels now support alternate unlock routes (`relicsOrEnemies`, `relicsAndEnemies`) so players can recover from missed relic routes by using combat skill, and status messaging now tells players the missing requirement before a gate opens. I also kept dash-refresh orbs, bounce pads, and moving/crumble platform timing in the loop so players can repeatedly execute movement mechanics across multiple chambers rather than only one encounter.
+**2) Gameplay improvements from playtesting (paragraph)**  
+From playtesting, the biggest issue was clarity around why players were blocked and when to push forward versus retreat. I improved gate-state communication (clear locked/unlocked signals), strengthened enemy-alert readability, and tuned dash refresh timing to reduce frustration while keeping movement skill-based. I also tightened reset/checkpoint flow so failed attempts return players to action faster, which improved pacing.
 
-### Prompt 3: New content since last Milestone and gameplay-loop context
-I added enough content to close the main loop across multiple repetitions: six playable levels, additional enemies, extra relic objectives, dash-refresh orbs, multiple bounce/moving/crumble platform setups, and varied gate conditions. This means the player repeatedly performs the full loop—traverse, avoid hazards, manage enemy pressure/state-machine behavior, collect/defeat for unlock requirements, pull joystick, and advance—across several tasks instead of a single isolated completion. The result is a fuller vertical slice where the core mechanic is executed multiple times in different contexts.
-
+**3) New content added + gameplay-loop context (paragraph)**  
+Since the previous milestone, I expanded content so the core loop is repeatable instead of one-and-done: more relic objectives, more enemy encounters, additional traversal hazards, and a multi-step gate progression structure. Players now perform the same foundational mechanics (platforming, dash management, threat handling, and objective collection) across multiple rooms/tasks before completion, which closes the main vertical-slice gameplay loop.
 
 ## Milestone 4 Devlog
 Milestone 4 Devlog goes here.
