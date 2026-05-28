@@ -4,16 +4,28 @@
 This repository now includes a playable Milestone 1 web prototype with the required core scope:
 - Player can move left/right and jump.
 - Test levels have platforming obstacles (gaps + spikes).
-- Player can reach progression gates across four levels, then complete the final gauntlet.
+- Player can reach progression gates across six levels, then complete the final gauntlet.
 - Enemy uses a behavior state machine with **Patrol → Alert → Reset**.
 - Includes interactive **joystick/lever pulls** to unlock progression gates.
 - Player and enemy use more polished, distinct visual materials/styles.
 - Player and enemy models now include layered parts and richer animation states for idle, run, jump/fall, dash, patrol, alert, reset, and defeated reads.
 - Moved the Visual Scripting bridge explanation outside the gameplay canvas so the game screen only shows tutorial prompts.
 - Added audio effects, particle VFX, ambient VFX, and decorative tilemap layers for stronger polish.
-- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, and collectible relic objectives.
+- Added extra mechanics for richer play: moving platforms, bounce pads, crumble platforms, dash-refresh orbs, alternate unlock routes, laser-bar traps, saw-blade traps, and collectible relic objectives.
 - Stage 1 difficulty is tuned easier (lighter enemy pressure and safer hazard spacing) to improve onboarding.
 
+
+Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
+
+## State Machine (MS1) — detailed implementation
+The enemy state machine is the main Milestone 1 state machine and it is still active in every level. It is implemented in `game.js` with explicit `EnemyStates`, transition evaluation in `getEnemyTransition()`, state-entry side effects in `enterEnemyState()`, and per-state actions in `updateEnemyPatrol()`, `updateEnemyAlert()`, and `updateEnemyReset()`.
+
+## Controls
+- `A` / `D` or `Left` / `Right Arrow`: Move
+- `Space`: Jump
+- `Shift`: Ground dash
+- `E`: Interact (pull lever/joystick)
+- `R`: Reset/restart current level
 
 Goal: collect relics in each stage, use movement tools like bounce pads and dash-refresh orbs, then pull that stage’s joystick to unlock its gate and progress. Later levels allow different routes, including relic collection, enemy defeat, or both depending on the chamber.
 
@@ -93,7 +105,15 @@ The state machine is connected to other systems in the game. It depends on the *
 - Status text for fail, success, and replay instructions.
 - Win state + manual replay/reset flow.
 
+## Itch.io Description
+**Relic Runner: Vertical Slice** is a short 2D platformer prototype about collecting relics, reading enemy states, and unlocking joystick-controlled gates. The goal is to collect every relic in the current stage, return to the joystick lever, pull it, and reach the gate without falling into spikes or being caught by patrol enemies.
 
+**Controls:**
+- `A` / `D` or `Left` / `Right Arrow`: Move
+- `Space`: Jump
+- `Shift`: Ground dash
+- `E`: Interact with joystick levers
+- `R`: Reset or restart the current level
 
 ## Milestone 2 Devlog
 
