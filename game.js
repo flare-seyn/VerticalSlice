@@ -59,6 +59,8 @@ function buildMaterials() {
 
 let audioContext = null;
 const particles = [];
+let bgmNextNoteTime = 0;
+let bgmStep = 0;
 
 function initAudio() {
   if (audioContext) return;
@@ -93,6 +95,29 @@ function playSound(type) {
   gain.connect(audioContext.destination);
   osc.start(now);
   osc.stop(now + config.duration);
+}
+
+function updateBgm() {
+  if (!audioContext || player.won) return;
+  const now = audioContext.currentTime;
+  if (bgmNextNoteTime === 0) bgmNextNoteTime = now + 0.04;
+  const notes = [220, 277.18, 329.63, 392.0, 329.63, 277.18];
+  while (bgmNextNoteTime < now + 0.12) {
+    const freq = notes[bgmStep % notes.length];
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, bgmNextNoteTime);
+    gain.gain.setValueAtTime(0.0001, bgmNextNoteTime);
+    gain.gain.linearRampToValueAtTime(0.012, bgmNextNoteTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, bgmNextNoteTime + 0.28);
+    osc.connect(gain);
+    gain.connect(audioContext.destination);
+    osc.start(bgmNextNoteTime);
+    osc.stop(bgmNextNoteTime + 0.3);
+    bgmNextNoteTime += 0.3;
+    bgmStep += 1;
+  }
 }
 
 function spawnParticles(x, y, count, color, options = {}) {
@@ -165,6 +190,9 @@ const player = {
   jumpBufferTimer: 0,
   animTime: 0,
   animationState: 'idle',
+  hearts: 3,
+  maxHearts: 3,
+  invulnerableTimer: 0,
 };
 
 
@@ -408,7 +436,7 @@ const levels = [
       { x: 875, y: 322, w: 14, h: 14, collected: false },
     ],
     lever: { x: 838, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
-    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
     enemies: [
       {
         spawnX: 430,
@@ -434,6 +462,48 @@ const levels = [
       },
     ],
   },
+  {
+    name: 'Level 5: Wind Bridge',
+    start: { x: 30, y: 430 },
+    unlockMode: 'relicsOrEnemies',
+    decorTiles: [{ x: 0, y: 0, w: 960, h: 96, type: 'wall' }],
+    platforms: [
+      { x: 0, y: 500, w: 200, h: 40 }, { x: 260, y: 460, w: 120, h: 20 }, { x: 430, y: 420, w: 120, h: 20 },
+      { x: 600, y: 380, w: 120, h: 20 }, { x: 780, y: 340, w: 140, h: 20 }, { x: 820, y: 500, w: 140, h: 40 },
+    ],
+    spikes: [{ x: 205, y: 500, w: 45, h: 40 }, { x: 560, y: 500, w: 45, h: 40 }],
+    movingPlatforms: [{ x: 345, y: 360, w: 86, h: 16, axis: 'y', origin: 360, range: 75, speed: 1.9, phase: 0.6 }],
+    bouncePads: [{ x: 790, y: 322, w: 38, h: 18, force: 980 }],
+    dashOrbs: [{ x: 360, y: 332, r: 10, active: true, timer: 0 }, { x: 650, y: 352, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 510, y: 330, w: 76, h: 16, state: 'solid', timer: 0 }],
+    relics: [{ x: 278, y: 442, w: 14, h: 14, collected: false }, { x: 805, y: 322, w: 14, h: 14, collected: false }],
+    lever: { x: 842, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 285, w: 30, h: 55, type: 'next', locked: true, initialLocked: true },
+    enemies: [{ spawnX: 610, y: 346, w: 34, h: 34, speed: 90, patrolMinX: 590, patrolMaxX: 720, detectionRange: 130, resetRange: 205, respawnDelay: 4 }],
+  },
+  {
+    name: 'Level 6: Crown Vault',
+    start: { x: 36, y: 430 },
+    unlockMode: 'relicsAndEnemies',
+    decorTiles: [{ x: 0, y: 0, w: 960, h: 96, type: 'wall' }, { x: 200, y: 120, w: 540, h: 32, type: 'trim' }],
+    platforms: [
+      { x: 0, y: 500, w: 180, h: 40 }, { x: 220, y: 468, w: 100, h: 20 }, { x: 390, y: 430, w: 110, h: 20 },
+      { x: 560, y: 388, w: 120, h: 20 }, { x: 740, y: 350, w: 120, h: 20 }, { x: 820, y: 500, w: 140, h: 40 },
+    ],
+    spikes: [{ x: 182, y: 500, w: 35, h: 40 }, { x: 330, y: 500, w: 35, h: 40 }, { x: 510, y: 500, w: 35, h: 40 }],
+    movingPlatforms: [{ x: 300, y: 330, w: 90, h: 16, axis: 'x', origin: 300, range: 95, speed: 2.0, phase: 0.3 }],
+    bouncePads: [{ x: 750, y: 332, w: 38, h: 18, force: 940 }],
+    dashOrbs: [{ x: 330, y: 300, r: 10, active: true, timer: 0 }, { x: 615, y: 358, r: 10, active: true, timer: 0 }],
+    crumblePlatforms: [{ x: 480, y: 340, w: 74, h: 16, state: 'solid', timer: 0 }, { x: 690, y: 310, w: 74, h: 16, state: 'solid', timer: 0 }],
+    relics: [{ x: 250, y: 450, w: 14, h: 14, collected: false }, { x: 777, y: 330, w: 14, h: 14, collected: false }],
+    lever: { x: 850, y: 460, w: 18, h: 40, pulled: false, promptRange: 76 },
+    gate: { x: 916, y: 295, w: 30, h: 55, type: 'finish', locked: true, initialLocked: true },
+    enemies: [
+      { spawnX: 402, y: 396, w: 34, h: 34, speed: 86, patrolMinX: 390, patrolMaxX: 500, detectionRange: 120, resetRange: 190, respawnDelay: 4.5 },
+      { spawnX: 563, y: 354, w: 34, h: 34, speed: 92, patrolMinX: 560, patrolMaxX: 680, detectionRange: 130, resetRange: 200, respawnDelay: 4.5 },
+    ],
+  },
+
 ];
 
 let currentLevelIndex = 0;
@@ -494,6 +564,8 @@ function resetEnemy() {
     state: EnemyStates.Patrol,
     direction: 1,
     defeated: false,
+    respawnDelay: levelEnemy.respawnDelay || 5,
+    respawnTimer: 0,
     animTime: 0,
     lastState: EnemyStates.Patrol,
   }));
@@ -511,7 +583,28 @@ function resetPlayer(position, message) {
   player.dashCharge = 1;
   player.animTime = 0;
   player.animationState = 'idle';
+  player.hearts = player.maxHearts;
+  player.invulnerableTimer = 0;
   setStatus(message);
+}
+
+function damagePlayer(reason) {
+  if (player.invulnerableTimer > 0 || player.won) return;
+  player.hearts -= 1;
+  player.invulnerableTimer = 1.1;
+  playSound('hazard');
+  spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
+  if (player.hearts <= 0) {
+    player.hearts = player.maxHearts;
+    restartLevel(`${reason} Out of hearts!`);
+    return;
+  }
+  const level = currentLevel();
+  player.x = level.start.x;
+  player.y = level.start.y;
+  player.vx = 0;
+  player.vy = 0;
+  setStatus(`${reason} Hearts: ${player.hearts}/${player.maxHearts}`);
 }
 
 function loadLevel(index, message) {
@@ -601,6 +694,7 @@ function updateDynamicFeatures(level, dt, nowMs) {
 
 function updatePlayerAdvancedMovement(dt) {
   player.animTime += dt;
+  if (player.invulnerableTimer > 0) player.invulnerableTimer = Math.max(0, player.invulnerableTimer - dt);
   if (player.dashCooldown > 0) player.dashCooldown -= dt;
   if (player.dashTimer > 0) player.dashTimer -= dt;
 
@@ -623,6 +717,10 @@ function getSolidPlatforms(level) {
   const movingPlatforms = level.movingPlatforms || [];
   const crumblePlatforms = (level.crumblePlatforms || []).filter((p) => p.state !== 'gone');
   return [...staticPlatforms, ...movingPlatforms, ...crumblePlatforms];
+}
+
+function horizontalOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x;
 }
 
 function updatePlayer(dt) {
@@ -680,18 +778,28 @@ function updatePlayer(dt) {
   const prevY = player.y;
 
   player.x += player.vx * dt;
-  player.y += player.vy * dt;
-
   player.x = Math.max(0, Math.min(world.width - player.w, player.x));
+  const solids = getSolidPlatforms(level);
+  for (const p of solids) {
+    if (!overlap(player, p)) continue;
+    player.x = prevX;
+    break;
+  }
+
+  player.y += player.vy * dt;
   player.onGround = false;
 
-  for (const p of getSolidPlatforms(level)) {
+  for (const p of solids) {
     if (!overlap(player, p)) continue;
 
-    const cameFromAbove = prevY + player.h <= p.y;
-    const cameFromBelow = prevY >= p.y + p.h;
+    const prevBottom = prevY + player.h;
+    const prevTop = prevY;
+    const currBottom = player.y + player.h;
+    const currTop = player.y;
+    const landingFromAbove = prevBottom <= p.y + 2 && currBottom >= p.y;
+    const hitFromBelow = prevTop >= p.y + p.h - 2 && currTop <= p.y + p.h;
 
-    if (cameFromAbove) {
+    if (landingFromAbove && player.vy >= 0) {
       player.y = p.y - player.h;
       player.vy = 0;
       player.onGround = true;
@@ -699,19 +807,25 @@ function updatePlayer(dt) {
         p.state = 'breaking';
         p.timer = 0.45;
       }
-    } else if (cameFromBelow) {
+    } else if (hitFromBelow && player.vy < 0) {
       player.y = p.y + p.h;
-      player.vy = Math.max(0, player.vy);
+      player.vy = 0;
     } else {
-      player.x = prevX;
+      // Fallback resolves deep overlaps deterministically.
+      if (Math.abs(prevBottom - p.y) < Math.abs(prevTop - (p.y + p.h))) {
+        player.y = p.y - player.h;
+        if (player.vy > 0) player.vy = 0;
+        player.onGround = true;
+      } else {
+        player.y = p.y + p.h;
+        if (player.vy < 0) player.vy = 0;
+      }
     }
   }
 
   for (const s of level.spikes) {
     if (overlap(player, s)) {
-      playSound('hazard');
-      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
-      restartLevel('Hit spikes!');
+      damagePlayer('Hit spikes!');
       return;
     }
   }
@@ -719,18 +833,22 @@ function updatePlayer(dt) {
   for (const enemy of enemies) {
     if (enemy.defeated) continue;
     if (!overlap(player, enemy)) continue;
-    const stomped = player.vy > 130 && (player.y + player.h - enemy.y) < 16;
+    const prevBottom = prevY + player.h;
+    const enemyTop = enemy.y;
+    const isFalling = player.vy > 90;
+    const crossedEnemyTop = prevBottom <= enemyTop + 8 && player.y + player.h >= enemyTop;
+    const centeredOnEnemy = horizontalOverlap(player, enemy);
+    const stomped = isFalling && crossedEnemyTop && centeredOnEnemy;
     if (stomped) {
       enemy.defeated = true;
+      enemy.respawnTimer = enemy.respawnDelay;
       player.vy = -380;
       playSound('bounce');
       spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 18, '#ffd66b', { speed: 110, life: 0.45, size: 4 });
       setStatus('Enemy incapacitated!');
       continue;
     }
-    playSound('hazard');
-    spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 22, '#ff6b6b', { speed: 130, life: 0.4, size: 5 });
-    restartLevel('Enemy got you!');
+    damagePlayer('Enemy hit!');
     return;
   }
 
@@ -763,7 +881,7 @@ function updatePlayer(dt) {
   }
 
   if (player.y > world.height + 80) {
-    restartLevel('You fell!');
+    damagePlayer('You fell!');
     return;
   }
 
@@ -884,7 +1002,18 @@ function updateEnemy(dt) {
 
   const playerCenterX = player.x + player.w / 2;
   for (const enemy of enemies) {
-    if (enemy.defeated) continue;
+    if (enemy.defeated) {
+      enemy.respawnTimer -= dt;
+      if (enemy.respawnTimer <= 0) {
+        enemy.defeated = false;
+        enemy.x = enemy.patrolMinX;
+        enemy.vx = 0;
+        enemy.direction = 1;
+        enemy.state = EnemyStates.Patrol;
+        spawnParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, 10, '#89b6ff', { speed: 70, life: 0.4, size: 3 });
+      }
+      continue;
+    }
     enemy.animTime += dt;
 
     const enemyCenterX = enemy.x + enemy.w / 2;
@@ -1071,8 +1200,10 @@ function drawPlayer() {
   const armSwing = runCycle * 5;
   const legSwing = runCycle * 5;
   const squash = state === 'fall' ? 1.05 : (state === 'jump' ? 0.96 : 1);
+  const invulnFlash = player.invulnerableTimer > 0 && Math.floor(player.invulnerableTimer * 12) % 2 === 0;
 
   ctx.save();
+  if (invulnFlash) ctx.globalAlpha = 0.5;
   ctx.translate(cx, py + player.h / 2);
   ctx.scale(facing, squash);
   ctx.translate(-player.w / 2, -player.h / 2);
@@ -1171,6 +1302,26 @@ function drawPlayer() {
   ctx.restore();
 }
 
+function drawHud() {
+  const heartSize = 18;
+  const gap = 8;
+  const startX = 18;
+  const y = 16;
+  for (let i = 0; i < player.maxHearts; i++) {
+    const filled = i < player.hearts;
+    const x = startX + i * (heartSize + gap);
+    ctx.fillStyle = filled ? '#ff5f7a' : '#5b3d45';
+    ctx.beginPath();
+    ctx.moveTo(x + 9, y + 17);
+    ctx.bezierCurveTo(x - 4, y + 8, x + 4, y - 6, x + 9, y + 3);
+    ctx.bezierCurveTo(x + 14, y - 6, x + 22, y + 8, x + 9, y + 17);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#d8e7ff';
+  ctx.font = '14px sans-serif';
+  ctx.fillText(`Level ${currentLevelIndex + 1}/${levels.length}`, 18, 54);
+}
+
 function drawEnemy() {
   if (!enemies.length) return;
   for (const enemy of enemies) {
@@ -1248,6 +1399,12 @@ function drawEnemy() {
       ctx.fillRect(cx + 3, mouthY + 3, 3, 5);
     }
 
+    if (enemy.defeated && enemy.respawnTimer > 0) {
+      ctx.fillStyle = '#d7e8ff';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(`${enemy.respawnTimer.toFixed(1)}s`, enemy.x + 3, enemy.y - 8);
+    }
+
     ctx.restore();
   }
 }
@@ -1296,6 +1453,7 @@ function draw() {
   drawPlayer();
   drawParticles();
   drawTutorialGuides(level);
+  drawHud();
 }
 
 let lastTime = performance.now();
@@ -1307,6 +1465,7 @@ function loop(now) {
   updatePlayer(dt);
   updateEnemy(dt);
   updateParticles(dt);
+  updateBgm();
   draw();
 
   keysPressed.clear();
