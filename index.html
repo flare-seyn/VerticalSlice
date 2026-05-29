@@ -10,10 +10,19 @@
   <main class="container">
     <h1>Vertical Slice – Milestone 3 Vertical Slice</h1>
     <p class="controls">
-      <strong>Controls:</strong> A/D or ←/→ move, Space jump, Shift ground dash, E interact, R reset. (6-level loop)
+      <strong>Controls:</strong> A/D or ←/→ move, Space jump, Shift ground dash, E interact, R reset. Press any control once to enable SFX/BGM.
     </p>
-    <canvas id="game" width="960" height="540" aria-label="2D platformer test levels"></canvas>
-    <p id="status" class="status">Complete each chamber objective, pull the joystick, and clear all 6 levels.</p>
+    <canvas id="game" width="960" height="540" aria-label="2D platformer with six relic-gated levels, hearts, respawning enemies, and traversal hazards"></canvas>
+    <p id="status" class="status">Collect each stage's relics, pull the joystick, and use the gate to clear all six levels.</p>
+    <section class="devlog-card" aria-label="Current gameplay features">
+      <h2>Current Build Notes</h2>
+      <p>
+        The prototype now includes a three-heart HUD, temporary invulnerability after damage, respawning stompable enemies with countdowns, procedural BGM, and six relic-gated platforming levels.
+      </p>
+      <p>
+        Enemies are threats and optional stomp targets; progression is based on relic collection so enemy respawns cannot re-lock a lever objective.
+      </p>
+    </section>
   </main>
   <script src="game.js"></script>
 </body>
