@@ -323,7 +323,6 @@ const levels = [
   {
     name: 'Level 3: Split Route Atrium',
     start: { x: 32, y: 430 },
-    unlockMode: 'relicsOrEnemies',
     decorTiles: [
       { x: 0, y: 0, w: 960, h: 104, type: 'wall' },
       { x: 110, y: 130, w: 160, h: 32, type: 'trim' },
@@ -394,7 +393,6 @@ const levels = [
   {
     name: 'Level 4: Exit Gauntlet',
     start: { x: 36, y: 430 },
-    unlockMode: 'relicsAndEnemies',
     decorTiles: [
       { x: 0, y: 0, w: 960, h: 112, type: 'wall' },
       { x: 72, y: 135, w: 210, h: 32, type: 'trim' },
@@ -469,7 +467,6 @@ const levels = [
   {
     name: 'Level 5: Wind Bridge',
     start: { x: 30, y: 430 },
-    unlockMode: 'relicsOrEnemies',
     decorTiles: [{ x: 0, y: 0, w: 960, h: 96, type: 'wall' }],
     platforms: [
       { x: 0, y: 500, w: 200, h: 40 }, { x: 260, y: 460, w: 120, h: 20 }, { x: 430, y: 420, w: 120, h: 20 },
@@ -488,7 +485,6 @@ const levels = [
   {
     name: 'Level 6: Crown Vault',
     start: { x: 36, y: 430 },
-    unlockMode: 'relicsAndEnemies',
     decorTiles: [{ x: 0, y: 0, w: 960, h: 96, type: 'wall' }, { x: 200, y: 120, w: 540, h: 32, type: 'trim' }],
     platforms: [
       { x: 0, y: 500, w: 180, h: 40 }, { x: 220, y: 468, w: 100, h: 20 }, { x: 390, y: 430, w: 110, h: 20 },
@@ -496,7 +492,10 @@ const levels = [
     ],
     spikes: [{ x: 182, y: 500, w: 35, h: 40 }, { x: 330, y: 500, w: 35, h: 40 }, { x: 510, y: 500, w: 35, h: 40 }],
     movingPlatforms: [{ x: 300, y: 330, w: 90, h: 16, axis: 'x', origin: 300, range: 95, speed: 2.0, phase: 0.3 }],
-    bouncePads: [{ x: 750, y: 332, w: 38, h: 18, force: 940 }],
+    bouncePads: [
+      { x: 750, y: 332, w: 38, h: 18, force: 940 },
+      { x: 882, y: 482, w: 38, h: 18, force: 980 },
+    ],
     dashOrbs: [{ x: 330, y: 300, r: 10, active: true, timer: 0 }, { x: 615, y: 358, r: 10, active: true, timer: 0 }],
     crumblePlatforms: [{ x: 480, y: 340, w: 74, h: 16, state: 'solid', timer: 0 }, { x: 690, y: 310, w: 74, h: 16, state: 'solid', timer: 0 }],
     relics: [{ x: 250, y: 450, w: 14, h: 14, collected: false }, { x: 777, y: 330, w: 14, h: 14, collected: false }],
