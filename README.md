@@ -93,7 +93,15 @@ The state machine is connected to other systems in the game. It depends on the *
 - Status text for fail, success, and replay instructions.
 - Win state + manual replay/reset flow.
 
+## Itch.io Description
+**Relic Runner: Vertical Slice** is a short 2D platformer prototype about collecting relics, reading enemy states, and unlocking joystick-controlled gates. The goal is to collect every relic in the current stage, return to the joystick lever, pull it, and reach the gate without falling into spikes or being caught by patrol enemies.
 
+**Controls:**
+- `A` / `D` or `Left` / `Right Arrow`: Move
+- `Space`: Jump
+- `Shift`: Ground dash
+- `E`: Interact with joystick levers
+- `R`: Reset or restart the current level
 
 ## Milestone 2 Devlog
 
