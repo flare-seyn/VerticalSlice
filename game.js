@@ -2,6 +2,17 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
 
+if (!ctx.ellipse) {
+  ctx.ellipse = function ellipseFallback(x, y, radiusX, radiusY, rotation, startAngle, endAngle, counterclockwise) {
+    this.save();
+    this.translate(x, y);
+    this.rotate(rotation);
+    this.scale(radiusX, radiusY);
+    this.arc(0, 0, 1, startAngle, endAngle, counterclockwise);
+    this.restore();
+  };
+}
+
 const world = {
   gravity: 1800,
   width: canvas.width,
@@ -61,6 +72,7 @@ let audioContext = null;
 const particles = [];
 let bgmNextNoteTime = 0;
 let bgmStep = 0;
+let renderWarningShown = false;
 
 function initAudio() {
   if (audioContext) return;
@@ -1350,6 +1362,22 @@ function drawLever(lever) {
   ctx.restore();
 }
 
+function drawPlayerBeacon() {
+  const cx = player.x + player.w / 2;
+  const cy = player.y + player.h / 2;
+  const flash = 0.75 + Math.sin(performance.now() / 120) * 0.2;
+
+  ctx.save();
+  ctx.globalAlpha = flash;
+  ctx.fillStyle = '#8ff7ff';
+  ctx.fillRect(cx - 13, cy - 22, 26, 44);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(cx - 7, cy - 16, 14, 9);
+  ctx.fillStyle = '#10344a';
+  ctx.fillRect(cx - 3, cy - 13, 7, 3);
+  ctx.restore();
+}
+
 function drawPlayer() {
   const time = performance.now() / 1000;
   const state = player.dashTimer > 0 ? 'dash' : player.animationState;
@@ -1595,6 +1623,17 @@ function drawTutorialGuides(level) {
   }
 }
 
+function drawSafely(drawFn, fallbackMessage) {
+  try {
+    drawFn();
+  } catch (error) {
+    if (!renderWarningShown) {
+      renderWarningShown = true;
+      console.warn(fallbackMessage, error);
+    }
+  }
+}
+
 function draw() {
   const level = currentLevel();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1617,8 +1656,10 @@ function draw() {
   drawRelics(level.relics);
   drawLever(level.lever);
   drawGate(level.gate);
-  drawEnemy();
-  drawPlayer();
+  drawPlayerBeacon();
+  drawHud();
+  drawSafely(drawEnemy, 'Enemy render fallback: keeping the frame alive.');
+  drawSafely(drawPlayer, 'Player render fallback: beacon remains visible.');
   drawParticles();
   drawTutorialGuides(level);
   drawHud();
