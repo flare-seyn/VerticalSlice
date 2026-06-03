@@ -591,6 +591,19 @@ function resetPlayer(position, message) {
   setStatus(message);
 }
 
+function resetGateRenderEffect(gate) {
+  gate.effectTimer = 0;
+  gate.effectDuration = 0;
+  gate.effectIntensity = 0;
+}
+
+function triggerGateRenderEffect(level, intensity = 1, duration = 1.25) {
+  if (!level.gate) return;
+  level.gate.effectTimer = duration;
+  level.gate.effectDuration = duration;
+  level.gate.effectIntensity = Math.max(level.gate.effectIntensity || 0, intensity);
+}
+
 function damagePlayer(reason) {
   if (player.invulnerableTimer > 0 || player.won) return;
   player.hearts -= 1;
@@ -615,6 +628,7 @@ function loadLevel(index, message) {
   particles.length = 0;
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
+  resetGateRenderEffect(level.gate);
   if (level.lever) level.lever.pulled = false;
   if (level.relics) level.relics.forEach((r) => { r.collected = false; });
   if (level.crumblePlatforms) {
@@ -662,6 +676,7 @@ function loadLevel(index, message) {
 function restartLevel(message = 'Level reset.') {
   const level = currentLevel();
   level.gate.locked = level.gate.initialLocked;
+  resetGateRenderEffect(level.gate);
   if (level.lever) level.lever.pulled = false;
   if (level.relics) level.relics.forEach((r) => { r.collected = false; });
   if (level.crumblePlatforms) {
@@ -685,6 +700,11 @@ function isPressed(code) {
 }
 
 function updateDynamicFeatures(level, dt, nowMs) {
+  if (level.gate && level.gate.effectTimer > 0) {
+    level.gate.effectTimer = Math.max(0, level.gate.effectTimer - dt);
+    if (level.gate.effectTimer === 0) level.gate.effectIntensity = 0;
+  }
+
   if (level.movingPlatforms) {
     for (const mp of level.movingPlatforms) {
       const offset = Math.sin(nowMs / 1000 * mp.speed + mp.phase) * mp.range;
@@ -955,6 +975,7 @@ function updatePlayer(dt) {
       } else {
         level.lever.pulled = true;
         level.gate.locked = false;
+        triggerGateRenderEffect(level, 1.25, 1.8);
         playSound('unlock');
         spawnParticles(level.gate.x + level.gate.w / 2, level.gate.y + level.gate.h / 2, 30, '#65df95', { speed: 135, life: 0.7, size: 5 });
         setStatus('Joystick pulled! Gate unlocked.');
@@ -970,6 +991,7 @@ function updatePlayer(dt) {
         spawnParticles(relic.x + relic.w / 2, relic.y + relic.h / 2, 14, '#ffd66b', { speed: 90, life: 0.42, size: 4 });
         const total = level.relics.length;
         const got = level.relics.filter((r) => r.collected).length;
+        triggerGateRenderEffect(level, 0.35 + got / total * 0.45, 0.9);
         setStatus(`Relic collected (${got}/${total}).`);
       }
     }
@@ -1257,22 +1279,51 @@ function drawRelics(relics) {
 }
 
 function drawGate(gate) {
-  const time = performance.now() / 1000;
+  const now = performance.now() / 1000;
+  const effectProgress = gate.effectDuration > 0 ? gate.effectTimer / gate.effectDuration : 0;
+  const gameplayGlow = Math.max(gate.locked ? 0 : 0.65, (gate.effectIntensity || 0) * effectProgress);
+  const pulse = 0.55 + Math.sin(now * 9) * 0.25;
   const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
   const shaderEnergy = shaderPulse(gate.x / world.width, gate.y / world.height, time, 0.3, 7);
   gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
   gateGradient.addColorStop(1, gate.locked ? '#5b4f40' : '#2e9d62');
+
+  ctx.save();
+  if (gameplayGlow > 0) {
+    ctx.shadowColor = gate.locked ? '#ffd66b' : '#8ff7ff';
+    ctx.shadowBlur = 10 + gameplayGlow * 26 * pulse;
+  }
   ctx.fillStyle = gateGradient;
   ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
-  ctx.fillStyle = `rgba(143, 247, 255, ${gate.locked ? 0.06 : 0.12 + shaderEnergy * 0.25})`;
-  ctx.fillRect(gate.x, gate.y, gate.w, gate.h);
+  ctx.restore();
+
   ctx.fillStyle = '#2f2f2f';
   ctx.fillRect(gate.x + 5, gate.y + 8, gate.w - 10, gate.h - 16);
 
+  if (gameplayGlow > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = Math.min(0.85, 0.18 + gameplayGlow * 0.7);
+    const glowGradient = ctx.createRadialGradient(
+      gate.x + gate.w / 2,
+      gate.y + gate.h / 2,
+      2,
+      gate.x + gate.w / 2,
+      gate.y + gate.h / 2,
+      gate.h * (0.7 + gameplayGlow * 0.35),
+    );
+    glowGradient.addColorStop(0, gate.locked ? '#ffe790' : '#bfffff');
+    glowGradient.addColorStop(0.5, gate.locked ? '#ffd66b66' : '#65df9566');
+    glowGradient.addColorStop(1, '#00000000');
+    ctx.fillStyle = glowGradient;
+    ctx.fillRect(gate.x - 34, gate.y - 34, gate.w + 68, gate.h + 68);
+    ctx.restore();
+  }
+
   if (gate.locked) {
-    ctx.fillStyle = '#f2cf5b';
+    ctx.fillStyle = gameplayGlow > 0.25 ? '#ffe790' : '#f2cf5b';
     ctx.fillRect(gate.x + 10, gate.y + 20, 10, 12);
-    ctx.strokeStyle = '#f2cf5b';
+    ctx.strokeStyle = ctx.fillStyle;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(gate.x + 15, gate.y + 20, 5, Math.PI, 2 * Math.PI);
