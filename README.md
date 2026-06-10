@@ -157,9 +157,7 @@ From playtesting, the biggest issue was clarity around why players were blocked 
 Since the previous milestone, I expanded content so the core loop is repeatable instead of one-and-done: more relic objectives, more enemy encounters, additional traversal hazards, and a multi-step gate progression structure. Players now perform the same foundational mechanics (platforming, dash management, threat handling, and objective collection) across multiple rooms/tasks before completion, which closes the main vertical-slice gameplay loop.
 
 ## Milestone 4 Devlog
-Milestone 4 Devlog goes here.
 
-## Final Devlog
 
 **1) Vertical Slice core loop + content**
 The core gameplay loop is: enter a chamber, read the terrain/enemy pattern, collect every relic, return to the joystick lever, activate the gate, and move to the next level. Across the six-level build, the player uses the same basic movement verbs (run, jump, ground dash, stomp enemies, and reset when needed) against increasingly varied content: static platforms, spikes, moving platforms, bounce pads, crumble platforms, dash-refresh orbs, relic routes, respawning patrol enemies, hearts/invulnerability, HUD feedback, SFX/BGM, and final gate progression. This matches my original Vertical Slice plan because it shows the player what the full game would feel like in miniature: short platforming rooms built around readable objectives, layered traversal tools, repeatable enemy pressure, and gates that turn exploration into a complete objective loop instead of a single mechanic test.
@@ -169,6 +167,3 @@ The rendering effect is the **Crystal Gate Pulse material/effect** in `game.js`.
 
 **3) Break-down process**
 My process for breaking down a large project is to start with a bubble diagram of major systems, then convert each bubble into task-step checklists with acceptance tests. For this project, the main bubbles were Player Controller, Level/Gate Objectives, Enemy State Machine, Hazards/Traversal Tools, Audio/VFX/Rendering Feedback, HUD/Health, and Devlog/Submission. I do plan to keep using both bubble diagrams and task step break-downs: the bubble diagram helps me see how systems depend on each other, while the task list keeps implementation concrete enough to test. Breaking the project into small steps makes scope much clearer because it turns a vague goal like “polish the game” into checkable pieces such as “enemy respawns after stomp,” “gate unlock does not depend on respawning enemies,” “final level has a return path,” and “collecting relics activates the gate rendering pulse.” In this Vertical Slice, that process worked best when I preserved a playable loop first and then layered complexity on top. The parts that went poorly were places where I added mechanics (enemy respawn) without immediately re-checking dependent systems (enemy-based gate requirements), so in future projects I would add dependency checks to every task: when one system changes, I would explicitly test all systems that read its state.
-
-## Open-source assets
-- None yet.
