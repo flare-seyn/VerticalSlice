@@ -245,6 +245,8 @@ const levels = [
     ],
     bouncePads: [{ x: 860, y: 302, w: 38, h: 18, force: 900 }],
     crumblePlatforms: [],
+    laserBars: [{ x: 610, y: 465, w: 80, h: 8, axis: 'x', range: 60, speed: 2.2, phase: 0.0, active: true }],
+    sawBlades: [{ x: 410, y: 476, r: 12, axis: 'y', range: 24, speed: 2.4, phase: 0.2 }],
     relics: [
       { x: 355, y: 470, w: 14, h: 14, collected: false },
       { x: 780, y: 350, w: 14, h: 14, collected: false },
@@ -295,6 +297,8 @@ const levels = [
     crumblePlatforms: [
       { x: 570, y: 330, w: 74, h: 16, state: 'solid', timer: 0 },
     ],
+    laserBars: [{ x: 604, y: 440, w: 96, h: 8, axis: 'y', range: 58, speed: 2.1, phase: 1.1, active: true }],
+    sawBlades: [{ x: 314, y: 434, r: 13, axis: 'x', range: 38, speed: 2.0, phase: 0.4 }],
     relics: [
       { x: 505, y: 386, w: 14, h: 14, collected: false },
       { x: 736, y: 432, w: 14, h: 14, collected: false },
@@ -645,6 +649,32 @@ function loadLevel(index, message) {
       p.timer = 0;
     });
   }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
+  }
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      lb.cx = lb.x;
+      lb.cy = lb.y;
+      lb.active = true;
+    }
+  }
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      saw.cx = saw.x;
+      saw.cy = saw.y;
+    }
+  }
   if (level.dashOrbs) {
     level.dashOrbs.forEach((orb) => {
       orb.active = true;
@@ -911,6 +941,33 @@ function updatePlayer(dt) {
     }
   }
 
+  if (level.laserBars) {
+    for (const lb of level.laserBars) {
+      const hit = { x: (lb.cx ?? lb.x), y: (lb.cy ?? lb.y), w: lb.w, h: lb.h };
+      if (lb.active && overlap(player, hit)) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Laser trap hit!');
+        return;
+      }
+    }
+  }
+
+  if (level.sawBlades) {
+    for (const saw of level.sawBlades) {
+      const cX = saw.cx ?? saw.x;
+      const cY = saw.cy ?? saw.y;
+      const nearX = Math.abs((player.x + player.w / 2) - cX) < (saw.r + player.w * 0.45);
+      const nearY = Math.abs((player.y + player.h / 2) - cY) < (saw.r + player.h * 0.45);
+      if (nearX && nearY) {
+        playSound('hazard');
+        spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#ff6b6b', { speed: 120, life: 0.35, size: 4 });
+        restartLevel('Saw trap hit!');
+        return;
+      }
+    }
+  }
+
   if (player.y > world.height + 80) {
     damagePlayer('You fell!');
     return;
@@ -1147,22 +1204,74 @@ function drawBouncePads(bouncePads) {
 }
 
 
+
+function hash2D(x, y) {
+  const v = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+function shaderPulse(uvx, uvy, time, speed, density) {
+  const flowX = uvx + time * speed;
+  const flowY = uvy + Math.sin(time * 0.7 + uvx * 6.0) * 0.15;
+  const cell = hash2D(Math.floor(flowX * density), Math.floor(flowY * density));
+  const edge = 1 - Math.abs(((flowX * density) % 1) - 0.5) * 2;
+  return Math.max(0, cell * edge);
+}
+
 function drawDashOrbs(orbs) {
   const time = performance.now() / 1000;
   for (const orb of orbs || []) {
     const alpha = orb.active ? 1 : 0.25;
     const pulse = Math.sin(time * 7 + orb.x * 0.01) * 2;
+    const shaderMask = shaderPulse(orb.x / world.width, orb.y / world.height, time, 0.45, 9);
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.strokeStyle = '#8ff7ff';
+    ctx.strokeStyle = `rgba(143, 247, 255, ${0.45 + shaderMask * 0.55})`;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.arc(orb.x, orb.y, orb.r + pulse, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = '#d8fbff';
+    ctx.fillStyle = `rgba(216, 251, 255, ${0.55 + shaderMask * 0.45})`;
     ctx.beginPath();
     ctx.arc(orb.x, orb.y, Math.max(3, orb.r - 4 + pulse * 0.4), 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawLaserBars(laserBars) {
+  const t = performance.now() / 1000;
+  for (const lb of laserBars || []) {
+    const x = lb.cx ?? lb.x; const y = lb.cy ?? lb.y;
+    ctx.globalAlpha = lb.active ? 0.9 : 0.25;
+    ctx.fillStyle = lb.active ? '#ff5f7a' : '#8a4857';
+    ctx.fillRect(x, y, lb.w, lb.h);
+    if (lb.active) {
+      ctx.fillStyle = `rgba(255,200,210,${0.25 + Math.sin(t*14)*0.1})`;
+      ctx.fillRect(x, y - 2, lb.w, lb.h + 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawSawBlades(sawBlades) {
+  const t = performance.now() / 1000;
+  for (const saw of sawBlades || []) {
+    const cx = saw.cx ?? saw.x; const cy = saw.cy ?? saw.y;
+    const teeth = 10;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(t * saw.speed);
+    ctx.fillStyle = '#cfd8e6';
+    ctx.beginPath();
+    for (let i = 0; i < teeth * 2; i++) {
+      const a = (Math.PI * 2 * i) / (teeth * 2);
+      const r = i % 2 === 0 ? saw.r : saw.r * 0.62;
+      const x = Math.cos(a) * r; const y = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5e6a7d'; ctx.beginPath(); ctx.arc(0,0,saw.r*0.28,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
 }
@@ -1187,6 +1296,7 @@ function drawGate(gate) {
   const gameplayGlow = Math.max(gate.locked ? 0 : 0.65, (gate.effectIntensity || 0) * effectProgress);
   const pulse = 0.55 + Math.sin(now * 9) * 0.25;
   const gateGradient = ctx.createLinearGradient(gate.x, gate.y, gate.x, gate.y + gate.h);
+  const shaderEnergy = shaderPulse(gate.x / world.width, gate.y / world.height, time, 0.3, 7);
   gateGradient.addColorStop(0, gate.locked ? '#8a765a' : '#65df95');
   gateGradient.addColorStop(1, gate.locked ? '#5b4f40' : '#2e9d62');
 
@@ -1353,7 +1463,7 @@ function drawPlayer() {
   ctx.fillStyle = '#ffffffaa';
   ctx.fillRect(17, 6, 4, 1.5);
 
-  // chest plate, belt, shoulder pads, and boot jets add visible model complexity.
+  // chest plate, belt, shoulder pads, knee guards, and boot jets add visible model complexity.
   ctx.fillStyle = '#b8f7ff';
   ctx.fillRect(10, 16, 10, 8);
   ctx.fillStyle = '#ffcf69';
@@ -1363,6 +1473,9 @@ function drawPlayer() {
   ctx.fillStyle = '#71dfff';
   ctx.fillRect(3, 13, 7, 5);
   ctx.fillRect(player.w - 10, 13, 7, 5);
+  ctx.fillStyle = '#19486a';
+  ctx.fillRect(8, 35, 5, 4);
+  ctx.fillRect(17, 35, 5, 4);
 
   if (!player.onGround || state === 'dash') {
     ctx.fillStyle = state === 'dash' ? '#fff3a3' : '#8ff7ff';
@@ -1553,6 +1666,8 @@ function draw() {
   drawPlatforms(getSolidPlatforms(level));
   drawSpikes(level.spikes);
   drawBouncePads(level.bouncePads);
+  drawLaserBars(level.laserBars);
+  drawSawBlades(level.sawBlades);
   drawDashOrbs(level.dashOrbs);
   drawRelics(level.relics);
   drawLever(level.lever);
@@ -1564,6 +1679,7 @@ function draw() {
   drawPlayerMarker();
   drawParticles();
   drawTutorialGuides(level);
+  drawHud();
 }
 
 let lastTime = performance.now();
@@ -1583,5 +1699,5 @@ function loop(now) {
 }
 
 buildMaterials();
-loadLevel(0, 'Level 1 started. Pull the joystick to open the first gate.');
+loadLevel(0, 'Level 1 started. Complete objectives, pull joystick, clear 6 levels.');
 requestAnimationFrame(loop);
