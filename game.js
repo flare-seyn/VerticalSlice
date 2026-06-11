@@ -1496,6 +1496,22 @@ function drawPlayer() {
   ctx.restore();
 }
 
+
+function drawPlayerMarker() {
+  const flash = 0.7 + Math.sin(performance.now() / 90) * 0.25;
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = `rgba(143, 247, 255, ${flash})`;
+  ctx.strokeRect(player.x - 2, player.y - 2, player.w + 4, player.h + 4);
+  ctx.fillStyle = '#8ff7ff';
+  ctx.beginPath();
+  ctx.moveTo(player.x + player.w / 2, player.y - 12);
+  ctx.lineTo(player.x + player.w / 2 - 7, player.y - 2);
+  ctx.lineTo(player.x + player.w / 2 + 7, player.y - 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawHud() {
   const heartSize = 18;
   const gap = 8;
@@ -1660,6 +1676,7 @@ function draw() {
   drawHud();
   drawSafely(drawEnemy, 'Enemy render fallback: keeping the frame alive.');
   drawSafely(drawPlayer, 'Player render fallback: beacon remains visible.');
+  drawPlayerMarker();
   drawParticles();
   drawTutorialGuides(level);
   drawHud();
