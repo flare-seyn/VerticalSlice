@@ -1,0 +1,20 @@
+Category,Value,Location,Initial Value,Revised Value,Reason
+Player,Move speed,game.js player.speed,280,280,Keep current horizontal feel until telemetry shows movement frustration.
+Player,Jump force,game.js player.jumpForce,730,730,Current jump supports existing level geometry.
+Player,Max hearts,game.js player.maxHearts,3,3,Three-hit allowance supports learning without removing risk.
+Player,Dash velocity,game.js dash impulse,420,420,Preserve existing dash routes before balance testing.
+Player,Dash cooldown,game.js player.dashCooldown,0.65,0.65,Good candidate for future tuning after dash-use telemetry.
+Player,Coyote time,game.js player.coyoteTimer,0.1,0.1,Forgiveness improves platforming readability.
+Player,Jump buffer,game.js player.jumpBufferTimer,0.12,0.12,Forgiveness improves responsiveness.
+Enemy,Alert speed multiplier,game.js updateEnemyAlert,1.35,1.35,Readable increase over patrol without overwhelming player.
+Enemy,Respawn delay,game.js resetEnemy default,5,5,Keeps enemies relevant while granting temporary relief.
+Enemy,Detection range,level enemy data,Varies by level,Pending,Review after deaths/damage source telemetry.
+Enemy,Reset range,level enemy data,Varies by level,Pending,Should stay larger than detection to avoid flicker.
+Reward,Relic requirement,canUnlockLevel,All relics,All relics,Clear objective loop remains the main progression gate.
+Reward,Dash orb respawn,game.js orb.timer,2.5,2.5,Supports retrying traversal without permanent soft lock.
+Hazard,Laser hit penalty,game.js laser collision,Restart level,Pending,May be harsher than heart damage; validate in playtest.
+Hazard,Saw hit penalty,game.js saw collision,Restart level,Pending,May be harsher than heart damage; validate in playtest.
+Progression,Level count,levels array,6,6,Preserve complete playable loop.
+Telemetry,Deaths tracked,Not implemented,No,Pending implementation,Needed for playtest analysis.
+Telemetry,Completion time tracked,Not implemented,No,Pending implementation,Needed to evaluate pacing.
+Telemetry,Ability usage tracked,Not implemented,No,Pending implementation,Needed to evaluate dash relevance.
